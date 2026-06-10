@@ -54,7 +54,9 @@
   .route{margin-top:28px}
   .summary{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dashed var(--rule);padding-bottom:8px;margin-bottom:6px}
   .summary .big{font:800 18px/1 inherit}
-  .stop{position:relative;padding:18px 0 18px 42px}
+  .stop{position:relative;padding:18px 0 18px 42px;opacity:0;transform:translateY(8px);animation:rise .45s ease forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.stop{animation:none;opacity:1;transform:none}}
   .stop:not(:last-child)::before{content:"";position:absolute;left:13px;top:26px;bottom:-12px;width:2px;background:var(--pitch)}
   .dot{position:absolute;left:6px;top:20px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--pitch)}
   .stop.exact .dot{background:var(--pitch)}
@@ -77,10 +79,15 @@
   .offer:last-child{border-bottom:none}
   .price{font:700 13px ui-monospace,Menlo,monospace;color:var(--pitch)}
   .notcfg{color:var(--muted);font-style:italic}
+  .subnote{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:9px 0 4px}
+  .fresh{display:inline-block;font:700 10px/1 inherit;letter-spacing:.04em;padding:3px 7px;border-radius:20px;
+    background:var(--pitch-soft);color:var(--pitch);vertical-align:middle;margin-left:4px}
+  .fresh.stale{background:#f6e3c8;color:#9a6a16}
   .ticket-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
   .ticket-links a{font:600 13px inherit;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 
   footer{margin-top:36px;border-top:1px solid var(--rule);padding-top:14px;font-size:12px;color:var(--muted)}
+  .foot-sources{display:block;margin-top:9px;font-size:11px;opacity:.8}
   @media (max-width:520px){.stub{grid-template-columns:1fr}h1{font-size:26px}}
 </style>
 </head>
@@ -89,9 +96,9 @@
   <header>
     <div class="kicker">World Cup 2026 · USA · Canada · Mexico</div>
     <h1>Follow My Team</h1>
-    <p class="sub">Your team's road through the tournament — every city they could
-      play, with live flight and hotel prices, real ticket listings, and kickoffs
-      in your own time zone. Prices are live or not shown; nothing here is made up.</p>
+    <p class="sub">Track your team's path through the tournament — every city they
+      could play in, with flight prices, hotel and ticket search for your dates,
+      and kickoff times in your own time zone. Live scores update as you watch.</p>
   </header>
 
   <section class="scores">
@@ -132,11 +139,11 @@
   </section>
 
   <footer id="foot">
-    Flight and hotel prices come live from the configured providers (Amadeus) and
-    appear only when a real offer exists. Ticket buttons open live listings on
-    FIFA, SeatGeek and StubHub. Early-round cities depend on the bracket draw, so
-    those rounds list every possible venue. Confirmed by FIFA: quarter-finals in
-    LA, Miami, Kansas City &amp; Boston; semi-finals in Dallas &amp; Atlanta; Final at MetLife.
+    Knockout-round cities are confirmed once the bracket draw is complete; until
+    then, each round shows every possible venue your team could reach. Confirmed
+    by FIFA: quarter-finals in LA, Miami, Kansas City &amp; Boston; semi-finals in
+    Dallas &amp; Atlanta; Final at MetLife Stadium, New York / NJ.
+    <span class="foot-sources">Flight prices via Travelpayouts · hotels via Booking.com &amp; Hotels.com · tickets via FIFA, SeatGeek &amp; StubHub · scores via football-data.org</span>
   </footer>
 </div>
 
@@ -189,19 +196,31 @@ async function loadScores(){
 }
 
 async function plot(){
+  const btn = $('#go');
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Plotting…';
+  const root = $('#route');
   const payload = {
     group: $('#group').value, finish: $('#finish').value,
     group_city: $('#city').value, home_tz: $('#tz').value,
   };
-  const d = await (await fetch('/api/path', {method:'POST',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
-  render(d);
+  try {
+    const d = await (await fetch('/api/path', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
+    render(d);
+    root.scrollIntoView({behavior:'smooth', block:'start'});
+  } catch(e) {
+    root.innerHTML = `<div class="empty" style="text-align:center;padding:30px">
+      Couldn't load the route just now — please try again.</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
 }
 
 function render(d){
   const root = $('#route');
   let html = `<div class="summary"><span class="big">The road ahead</span>
-    <span class="km" style="font:700 13px ui-monospace,Menlo;color:var(--pitch)">live prices · per stop</span></div>`;
+    <span class="km" style="font:700 13px ui-monospace,Menlo;color:var(--pitch)">tap any stop for prices</span></div>`;
 
   d.steps.forEach((step, i) => {
     if(step.certain){
@@ -209,7 +228,7 @@ function render(d){
       const leg = v.leg;
       const legTxt = leg.same_city ? 'Same city — no travel'
         : `<b>${leg.distance_mi} mi</b> from your last stop${leg.cross_border?' · ✈ cross-border':''}`;
-      html += `<div class="stop exact"><span class="dot"></span>
+      html += `<div class="stop exact" style="animation-delay:${i*70}ms"><span class="dot"></span>
         <div class="round">${step.round_label}</div>
         <div class="city-line"><span class="city">${v.city}</span>
           <span class="stadium">${v.stadium}</span><span class="flagtag">${v.country}</span></div>
@@ -219,7 +238,7 @@ function render(d){
       </div>`;
     } else {
       const names = step.cities.map(c => `<span class="pill">${c.city}</span>`).join('');
-      html += `<div class="stop"><span class="dot"></span>
+      html += `<div class="stop" style="animation-delay:${i*70}ms"><span class="dot"></span>
         <div class="round">${step.round_label}</div>
         <div class="meta">Exact city set by the bracket draw — possible venues:</div>
         <div class="pills">${names}</div></div>`;
@@ -231,8 +250,8 @@ function render(d){
 function actionsFor(v, leg, roundLabel, i){
   const canFly = !leg.same_city;
   return `<div class="actions">
-    ${canFly?`<button onclick="lookupFlights('${leg.origin_iata}','${leg.dest_iata}',${i})">Live flights</button>`:''}
-    <button onclick="lookupHotels('${v.key}',${i})">Cheapest hotels</button>
+    ${canFly?`<button onclick="lookupFlights('${leg.origin_iata}','${leg.dest_iata}',${i})">Flight prices</button>`:''}
+    <button onclick="lookupHotels('${v.key}',${i})">Find hotels</button>
     <button onclick="lookupTickets('${v.key}','${roundLabel}',${i})">Tickets</button>
   </div>`;
 }
@@ -241,30 +260,46 @@ function panel(i){ return $('#ph-'+i); }
 function setPanel(i, html){ panel(i).innerHTML = `<div class="panel">${html}</div>`; }
 
 async function lookupFlights(origin, dest, i){
-  setPanel(i, `<h4>Flights ${origin} → ${dest}</h4><div class="empty">Checking live prices…</div>`);
+  setPanel(i, `<h4>Flights ${origin} → ${dest}</h4><div class="empty">Checking fares…</div>`);
   const date = $('#depart').value, adults = $('#adults').value;
   const d = await (await fetch(`/api/flights?origin=${origin}&dest=${dest}&date=${date}&adults=${adults}`)).json();
-  if(!d.configured){ return setPanel(i, `<h4>Flights ${origin} → ${dest}</h4><div class="notcfg">${d.message}</div>`); }
-  if(d.error || !d.offers || !d.offers.length){
-    return setPanel(i, `<h4>Flights ${origin} → ${dest}</h4><div class="notcfg">${d.message||'No offers.'}</div>`); }
-  const rows = d.offers.map(o => `<div class="offer">
-    <span>${o.carrier||'—'} · ${o.stops===0?'nonstop':o.stops+' stop'} </span>
-    <span class="price">$${o.price.toFixed(0)} ${o.currency}</span></div>`).join('');
-  setPanel(i, `<h4>Flights ${origin} → ${dest} · ${date}</h4>${rows}`);
+
+  // Cached-price section (only if a token is set AND real fares came back)
+  let priceHtml = '';
+  if(d.configured && d.offers && d.offers.length){
+    priceHtml = `<div class="subnote">Cached recent fares — real prices people saw, not a live quote:</div>` +
+      d.offers.map(o => {
+        const seg = `${o.airline||'—'} · ${o.transfers===0?'nonstop':o.transfers+' stop'} · seen ${o.departure_at||date}`;
+        const label = o.link ? `<a href="${o.link}" target="_blank" rel="noopener">${seg} ↗</a>` : seg;
+        const fresh = o.freshness ? `<span class="fresh ${o.freshness.days>4?'stale':''}">${o.freshness.label}</span>` : '';
+        return `<div class="offer"><span>${label} ${fresh}</span>
+          <span class="price">$${Math.round(o.price)} ${o.currency}</span></div>`;
+      }).join('');
+  } else {
+    priceHtml = `<div class="notcfg">${d.message||'No cached fares — check the live search below.'}</div>`;
+  }
+
+  // Live-search links always render
+  const links = (d.live_links||[]).map(l =>
+    `<a href="${l.url}" target="_blank" rel="noopener">${l.site} ↗</a>`).join('');
+
+  setPanel(i, `<h4>Flights ${origin} → ${dest} · ${date}</h4>
+    ${priceHtml}
+    <div class="subnote">See live fares:</div>
+    <div class="ticket-links">${links}</div>`);
 }
 
 async function lookupHotels(cityKey, i){
-  setPanel(i, `<h4>Hotels near venue</h4><div class="empty">Checking live rates…</div>`);
+  setPanel(i, `<h4>Hotels</h4><div class="empty">Finding searches…</div>`);
   const ci = $('#depart').value;
   const co = new Date(new Date(ci).getTime()+86400000).toISOString().slice(0,10);
   const adults = $('#adults').value;
   const d = await (await fetch(`/api/hotels?city=${cityKey}&check_in=${ci}&check_out=${co}&adults=${adults}`)).json();
-  if(!d.configured){ return setPanel(i, `<h4>Hotels</h4><div class="notcfg">${d.message}</div>`); }
-  if(d.error || !d.offers || !d.offers.length){
-    return setPanel(i, `<h4>Hotels</h4><div class="notcfg">${d.message||'No rates.'}</div>`); }
-  const rows = d.offers.map(o => `<div class="offer"><span>${o.name}</span>
-    <span class="price">$${o.price.toFixed(0)} ${o.currency}</span></div>`).join('');
-  setPanel(i, `<h4>Cheapest hotels · ${ci} → ${co}</h4>${rows}`);
+  const links = (d.links||[]).map(l =>
+    `<a href="${l.url}" target="_blank" rel="noopener">${l.site} ↗</a>`).join('');
+  setPanel(i, `<h4>Hotels · ${ci} → ${co}</h4>
+    <div class="subnote">${d.note||'Live listings for your dates:'}</div>
+    <div class="ticket-links">${links}</div>`);
 }
 
 async function lookupTickets(cityKey, roundLabel, i){
