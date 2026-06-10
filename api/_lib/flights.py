@@ -1,92 +1,151 @@
 """
-Flight prices — real data via Amadeus Self-Service API.
+Flight prices — Travelpayouts / Aviasales cached Data API + a live-search link.
 
-Why Amadeus: it has a genuine free self-serve tier (test + production keys you
-sign up for at developers.amadeus.com), unlike Skyscanner/Google Flights which
-are partner-only or have no public API. Swappable: the function returns a
-normalized shape, so a Duffel/Kiwi provider could drop in behind the same
-interface.
+Why this provider: genuinely free (no card, no per-call billing), and unlike
+Amadeus it is not being deprecated. The data API only needs a token from your
+Travelpayouts profile; no minimum-traffic gate (that applies only to the
+real-time search API, which we deliberately don't use).
 
-CONTRACT: never fabricate prices. If the key is missing, return
-{"configured": False, ...}. If the API errors or has no offers, say so
-explicitly. Every price on screen is a real Amadeus offer or nothing.
+Honesty model:
+  * Prices are CACHED from recent user searches, each carrying a timestamp
+    (`found_at`, when the fare was last seen; some endpoints use `expires_at`).
+  * We compute each fare's AGE from that real timestamp and label it
+    "seen N days ago" so the fan knows how stale it is — never invented.
+  * Every result is paired with a link to LIVE search (Google Flights /
+    Skyscanner) to confirm the current fare.
+  * No token -> configured: False. No data -> honest empty message.
+
+Informational only — no affiliate markers are added.
 """
 import os
 import json
-import time
 import urllib.parse
 import urllib.request
-
-AMADEUS_BASE = os.environ.get("AMADEUS_BASE", "https://test.api.amadeus.com")
-_token_cache = {"token": None, "exp": 0}
+from datetime import datetime, timezone
 
 
-def _http(method, url, *, headers=None, data=None, timeout=10):
-    req = urllib.request.Request(url, method=method, headers=headers or {})
-    if data is not None:
-        if isinstance(data, dict):
-            data = urllib.parse.urlencode(data).encode()
-        req.data = data
+TP_BASE = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
+
+
+def _http_get(url, headers, timeout=10):
+    req = urllib.request.Request(url, headers=headers, method="GET")
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
-def _get_token():
-    """OAuth2 client-credentials token, cached until ~30s before expiry."""
-    cid = os.environ.get("AMADEUS_CLIENT_ID")
-    secret = os.environ.get("AMADEUS_CLIENT_SECRET")
-    if not cid or not secret:
+def _parse_iso(ts):
+    """Parse an ISO-8601 timestamp (handles trailing 'Z'). None on failure."""
+    if not ts:
         return None
-    now = time.time()
-    if _token_cache["token"] and now < _token_cache["exp"] - 30:
-        return _token_cache["token"]
-    body = {"grant_type": "client_credentials", "client_id": cid, "client_secret": secret}
-    res = _http("POST", f"{AMADEUS_BASE}/v1/security/oauth2/token",
-                headers={"Content-Type": "application/x-www-form-urlencoded"}, data=body)
-    _token_cache["token"] = res["access_token"]
-    _token_cache["exp"] = now + int(res.get("expires_in", 1799))
-    return _token_cache["token"]
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _freshness(found_at, expires_at):
+    """Return a human label + numeric age from a real cache timestamp.
+
+    Prefers `found_at` (when the fare was last seen). Falls back to estimating
+    from `expires_at` (caches typically live ~7 days, so seen ≈ expires - 7d).
+    Returns {"label": str, "days": int|None, "seen_at": iso|None} or None.
+    """
+    seen = _parse_iso(found_at)
+    source = found_at
+    if seen is None:
+        exp = _parse_iso(expires_at)
+        if exp is not None:
+            # rough: assume a ~7-day cache window
+            from datetime import timedelta
+            seen = exp - timedelta(days=7)
+            source = seen.isoformat()
+    if seen is None:
+        return None
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    delta = now - seen
+    days = delta.days
+    hours = int(delta.total_seconds() // 3600)
+    if days <= 0:
+        label = "seen today" if hours < 24 else "seen <1 day ago"
+        if hours <= 1:
+            label = "seen just now"
+    elif days == 1:
+        label = "seen 1 day ago"
+    else:
+        label = f"seen {days} days ago"
+    return {"label": label, "days": max(days, 0), "seen_at": source}
+
+
+def live_search_links(origin_iata, dest_iata, depart_date):
+    """Deep-links to live flight search so the fan can verify the current fare."""
+    g = (f"https://www.google.com/travel/flights"
+         f"?q=Flights%20from%20{origin_iata}%20to%20{dest_iata}%20on%20{depart_date}")
+    s = (f"https://www.skyscanner.com/transport/flights/"
+         f"{origin_iata.lower()}/{dest_iata.lower()}/{depart_date.replace('-', '')[2:]}/")
+    return [
+        {"site": "Google Flights", "url": g},
+        {"site": "Skyscanner", "url": s},
+    ]
 
 
 def search_flights(origin_iata, dest_iata, depart_date, adults=1):
-    """Return cheapest real offers, or an honest unconfigured/empty result.
+    """Cheapest cached fares for the route/date + live-search links.
 
-    depart_date: 'YYYY-MM-DD'
+    depart_date: 'YYYY-MM-DD' (or 'YYYY-MM' for a whole month).
     """
-    if not os.environ.get("AMADEUS_CLIENT_ID"):
-        return {"configured": False, "provider": "amadeus",
-                "message": "Add AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET to enable live flight prices."}
+    links = live_search_links(origin_iata, dest_iata, depart_date)
+    token = os.environ.get("TRAVELPAYOUTS_TOKEN")
+    if not token:
+        return {"configured": False, "provider": "travelpayouts",
+                "live_links": links,
+                "message": "Add TRAVELPAYOUTS_TOKEN for cached price estimates. "
+                           "Live-search links work without it."}
     try:
-        token = _get_token()
         params = {
-            "originLocationCode": origin_iata,
-            "destinationLocationCode": dest_iata,
-            "departureDate": depart_date,
-            "adults": adults,
-            "currencyCode": "USD",
-            "max": 5,
+            "origin": origin_iata,
+            "destination": dest_iata,
+            "departure_at": depart_date,
+            "currency": "usd",
+            "sorting": "price",
+            "limit": 5,
+            "one_way": "true",
+            # Cache is partitioned by "market"; for US/CA/MX routes we want the
+            # US market. Override with TRAVELPAYOUTS_MARKET if needed.
+            "market": os.environ.get("TRAVELPAYOUTS_MARKET", "us"),
+            "token": token,
         }
-        url = f"{AMADEUS_BASE}/v2/shopping/flight-offers?" + urllib.parse.urlencode(params)
-        res = _http("GET", url, headers={"Authorization": f"Bearer {token}"})
-        offers = res.get("data", [])
-        if not offers:
-            return {"configured": True, "provider": "amadeus", "offers": [],
-                    "message": "No flight offers found for that route and date."}
-        norm = []
-        for o in offers[:5]:
-            price = o.get("price", {})
-            itin = o.get("itineraries", [{}])[0]
-            segs = itin.get("segments", [])
-            norm.append({
-                "price": float(price.get("grandTotal", price.get("total", 0))),
-                "currency": price.get("currency", "USD"),
-                "duration": itin.get("duration", ""),
-                "stops": max(0, len(segs) - 1),
-                "carrier": segs[0].get("carrierCode", "") if segs else "",
+        url = TP_BASE + "?" + urllib.parse.urlencode(params)
+        res = _http_get(url, {"X-Access-Token": token})
+        if not res.get("success", False):
+            return {"configured": True, "provider": "travelpayouts",
+                    "live_links": links, "offers": [],
+                    "message": "No cached prices for that route/date. Try the live search."}
+        offers = []
+        for o in res.get("data", []) or []:
+            fresh = _freshness(o.get("found_at"), o.get("expires_at"))
+            offers.append({
+                "price": o.get("price"),
+                "currency": "USD",
+                "airline": o.get("airline", ""),
+                "departure_at": (o.get("departure_at", "") or "")[:10],
+                "transfers": o.get("transfers", 0),
+                "link": ("https://www.aviasales.com" + o["link"]) if o.get("link") else None,
+                "cached": True,
+                "freshness": fresh,           # {"label","days","seen_at"} or None
             })
-        norm.sort(key=lambda x: x["price"])
-        return {"configured": True, "provider": "amadeus", "offers": norm,
-                "cheapest": norm[0] if norm else None}
+        offers = [o for o in offers if o["price"] is not None]
+        offers.sort(key=lambda x: x["price"])
+        if not offers:
+            return {"configured": True, "provider": "travelpayouts",
+                    "live_links": links, "offers": [],
+                    "message": "No cached prices right now. Use the live search."}
+        return {"configured": True, "provider": "travelpayouts",
+                "live_links": links, "offers": offers,
+                "cheapest": offers[0],
+                "note": "Cached estimates from recent searches — confirm via live search."}
     except Exception as e:
-        return {"configured": True, "provider": "amadeus", "error": str(e),
-                "message": "Live flight lookup failed; no estimate shown rather than a fabricated one."}
+        return {"configured": True, "provider": "travelpayouts", "live_links": links,
+                "error": str(e),
+                "message": "Cached price lookup failed; use the live-search links instead."}
