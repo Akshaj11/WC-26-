@@ -2,7 +2,7 @@ from http.server import BaseHTTPRequestHandler
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_lib"))
+sys.path.insert(0, os.path.dirname(__file__))
 
 from _lib import venues, bracket
 from _lib.responses import send_json, read_json_body
