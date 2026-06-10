@@ -1,1 +1,0 @@
-# pinned for Vercel python runtime; stdlib-only providers need no extra deps
