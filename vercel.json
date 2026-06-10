@@ -1,7 +1,9 @@
 {
-  "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/*.py": { "runtime": "@vercel/python@4.3.0" }
+    "api/**/*.py": {
+      "excludeFiles": "{public/**,*.zip,README.md,.env.example}"
+    }
   },
   "rewrites": [
     { "source": "/", "destination": "/index.html" }

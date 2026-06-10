@@ -1,28 +1,19 @@
 # Follow My Team — WC26 (live data)
 
 A World Cup 2026 fan companion. Pick your team, see their route through the
-tournament, and pull **live** flight prices, hotel rates, real ticket listings,
-and live scores — in your own time zone.
-
-**Core principle: no fabricated numbers.** Every price on screen is a real offer
-from a configured provider, or it isn't shown. If a provider key is missing, the
-app says how to enable it instead of inventing a figure.
+tournament, and pull flight prices, hotel and ticket search, and live scores —
+all in your own time zone.
 
 ---
 
-## Deploy to Vercel
+## Deploy (GitHub → Vercel, no command line)
 
-```bash
-npm i -g vercel        # if you don't have it
-vercel                 # from this folder; follow prompts
-vercel --prod          # to ship
-```
-
-The structure is Vercel-native:
-- `api/*.py` — Python serverless functions (one per endpoint)
-- `public/index.html` — static frontend
-- `vercel.json` — routing + Python runtime
-- providers use only the Python standard library, so there's nothing to install
+1. Create a GitHub repo and upload the **contents** of this folder (so `api/`,
+   `public/`, and `vercel.json` sit at the repo root — not nested in a subfolder).
+2. At vercel.com, **Add New → Project**, import the repo.
+3. Before deploying, add your environment variables (below), then **Deploy**.
+4. Every future commit on GitHub auto-redeploys. To apply new env vars, redeploy
+   the latest deployment from the Vercel **Deployments** tab.
 
 ## Add your API keys (Vercel → Project → Settings → Environment Variables)
 
@@ -34,22 +25,27 @@ Nothing is hard-coded; keys live only in env vars. Add the ones you want live:
 | football-data.org | `FOOTBALLDATA_KEY` | https://www.football-data.org/client/register |
 | API-Football | `APIFOOTBALL_KEY` | https://www.api-football.com/ (via RapidAPI or api-sports.io) |
 
-### Flights + Hotels — Amadeus Self-Service (one account covers both)
+### Flights — cached price estimates (Travelpayouts, free, no card)
 | Env var | Where |
 |---|---|
-| `AMADEUS_CLIENT_ID` | https://developers.amadeus.com (create an app) |
-| `AMADEUS_CLIENT_SECRET` | same app |
-| `AMADEUS_BASE` (optional) | defaults to `https://test.api.amadeus.com`; set to `https://api.amadeus.com` for production data |
+| `TRAVELPAYOUTS_TOKEN` | Sign up at https://www.travelpayouts.com, connect the Aviasales program, copy the token from Profile → API token |
 
-> Amadeus gives test keys instantly. Test data is real-shaped but limited to
-> certain routes/markets; switch `AMADEUS_BASE` to production once approved for
-> full coverage.
+The flight panel shows cached recent fares (real prices people saw in the last
+few days, clearly labelled "not a live quote") plus always-on links to live
+Google Flights / Skyscanner search. Without the token, you still get the live
+links — only the cached estimates are hidden. This replaces Amadeus, which is
+being **deprecated on July 17, 2026** (mid-tournament) and so is unsuitable here.
+
+### Hotels — no key needed
+Hotel buttons open live Booking.com / Hotels.com / Google Hotels searches for
+the venue city and your dates. Free real-time hotel pricing APIs no longer exist
+for indie use, so hotels are a search link-out to Booking.com and Hotels.com.
 
 ### Tickets — links work with no key
 Ticket buttons always open live FIFA / SeatGeek / StubHub searches for the match.
 Optionally add `SEATGEEK_CLIENT_ID` (https://seatgeek.com/account/develop) to also
 surface matching SeatGeek events inline (prices shown only when SeatGeek exposes
-them — never invented).
+them).
 
 After adding vars, redeploy (`vercel --prod`) so the functions pick them up.
 
@@ -62,24 +58,23 @@ After adding vars, redeploy (`vercel --prod`) so the functions pick them up.
 | GET | `/api/meta` | venues, groups, finish options |
 | POST | `/api/path` | team route + per-leg distance + kickoff in your tz |
 | GET | `/api/scores` | live/recent WC26 matches |
-| GET | `/api/flights?origin=&dest=&date=&adults=` | live flight offers |
-| GET | `/api/hotels?city=&check_in=&check_out=&adults=` | live hotel rates |
+| GET | `/api/flights?origin=&dest=&date=&adults=` | cached fare estimates + live-search links |
+| GET | `/api/hotels?city=&check_in=&check_out=&adults=` | Booking.com / Hotels.com search links |
 | GET | `/api/tickets?city=&round=` | resale deep-links (+ SeatGeek events if keyed) |
 
 Each price endpoint returns `{"configured": false, "message": ...}` when its key
-is absent — the contract that keeps fabricated numbers off the screen.
+is absent, so the UI can show a "connect this" state instead of an empty panel.
 
-## How the "no fabrication" guarantee works
+## How data sources behave
 
-Every provider in `api/_lib/` follows the same contract:
-1. No key → `configured: false` + a message telling you which env var to set.
-2. Key present but API errors / returns nothing → explicit message, no number.
-3. Real offers → normalized and shown.
+Every provider in `api/_lib/` follows the same pattern:
+1. No key → `configured: false` + a message naming the env var to set.
+2. Key present but the API errors or returns nothing → an explicit message.
+3. Real results → normalized and shown.
 
-The only numbers shown without any API are **great-circle distances**, which are
-computed from coordinates (in `venues.py`) — real math, not market data.
+Distances between venues are computed from coordinates (in `venues.py`).
 
-## Known limits / honest notes
+## Notes
 
 - WC26 ticket resale has no clean open live-price feed, so tickets are link-outs
   by design (your stated preference). SeatGeek inline events appear only if you
@@ -91,8 +86,10 @@ computed from coordinates (in `venues.py`) — real math, not market data.
   contract (unconfigured states) and logic, not by a live round-trip. Your first
   `vercel --prod` with keys set is where real offers will appear.
 
-## Swapping flight/hotel providers
+## Swapping flight providers
 
-`api/_lib/flights.py` and `hotels.py` return a normalized shape. To use Duffel,
-Kiwi/Tequila, or a hotel aggregator instead of Amadeus, implement the same
-function signature and return shape; the frontend needs no changes.
+`api/_lib/flights.py` returns a normalized shape. To use Duffel, Kiwi/Tequila,
+or another source instead of Travelpayouts, implement the same function
+signature and return shape; the frontend needs no changes. Hotels and tickets
+are link-out modules — adjust the URL builders in `hotels.py` / `tickets.py` to
+add or change marketplaces.
