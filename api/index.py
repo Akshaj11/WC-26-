@@ -76,8 +76,15 @@ INDEX_HTML = r"""<!doctype html>
     border-bottom:1px solid rgba(255,255,255,.08);font-size:14px;color:#eaf3ee}
   .score-row:last-child{border-bottom:none}
   .score-row .teams{font-weight:600}
-  .score-row .sc{font:800 15px ui-monospace,Menlo,monospace;color:#fff}
-  .score-row .st{color:var(--gold);font-size:11px;font-weight:700}
+  .score-row .vs{color:rgba(234,243,238,.45);font-size:11px;font-weight:400;margin:0 3px}
+  .score-row .sc{font:800 15px ui-monospace,Menlo,monospace;color:#fff;display:inline-flex;align-items:center;gap:8px}
+  .st{font-size:11px;font-weight:700}
+  .st-soon{color:rgba(234,243,238,.6)}
+  .st-done{color:rgba(234,243,238,.45)}
+  .st-live{display:inline-flex;align-items:center;gap:5px;font:800 11px/1 inherit;color:#fff;
+    background:var(--live);border-radius:20px;padding:4px 9px}
+  .st-live .live-dot{width:6px;height:6px;background:#fff;box-shadow:none;animation:pulse 1.6s infinite}
+  .row-live{background:rgba(232,17,45,.10)}
   .empty{padding:14px 16px;font-size:13px;color:rgba(234,243,238,.6);font-style:italic}
 
   .stub{margin-top:6px;border:none;background:var(--paper2);border-radius:14px;
@@ -562,19 +569,63 @@ async function boot(){
   if(applyShared()) plot();
 }
 
+// Map raw provider status codes to {label, state} where state is
+// 'live' | 'upcoming' | 'done'. Covers football-data.org and api-football.
+function matchState(m){
+  const s = (m.status || '').toUpperCase();
+  const live = ['IN_PLAY','PAUSED','LIVE','1H','2H','HT','ET','BT','P','INT'];
+  const done = ['FINISHED','FT','AET','PEN','AWD','WO'];
+  const half = (s==='HT'||s==='PAUSED');
+  if(live.includes(s)){
+    let label = 'LIVE';
+    if(half) label = 'HT';
+    else if(m.minute!=null) label = m.minute + "'";
+    return {state:'live', label};
+  }
+  if(done.includes(s)) return {state:'done', label:'FT'};
+  // upcoming — show kickoff time if we have it
+  let label = 'Upcoming';
+  if(m.utc){
+    const dt = new Date(m.utc);
+    if(!isNaN(dt)){
+      const now = new Date();
+      const sameDay = dt.toDateString() === now.toDateString();
+      label = dt.toLocaleString([], sameDay
+        ? {hour:'numeric', minute:'2-digit'}
+        : {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+    }
+  }
+  return {state:'upcoming', label};
+}
+
 async function loadScores(){
   const body = $('#scores-body');
   try{
     const d = await (await fetch('/api/scores')).json();
     if(!d.configured){ body.innerHTML = `<div class="empty">${d.message}</div>`; return; }
     if(d.error){ body.innerHTML = `<div class="empty">${d.message}</div>`; return; }
-    const ms = (d.matches || []).slice(0, 8);
+    let ms = (d.matches || []).map(m => ({...m, _st: matchState(m)}));
     if(!ms.length){ body.innerHTML = `<div class="empty">No matches to show right now.</div>`; return; }
+
+    // Sort: live first, then upcoming-soon, then recently finished.
+    const rank = {live:0, upcoming:1, done:2};
+    ms.sort((a,b) => {
+      if(rank[a._st.state] !== rank[b._st.state]) return rank[a._st.state]-rank[b._st.state];
+      const ta = a.utc ? Date.parse(a.utc) : 0, tb = b.utc ? Date.parse(b.utc) : 0;
+      // upcoming: soonest first; others: most recent first
+      return a._st.state==='upcoming' ? ta-tb : tb-ta;
+    });
+    ms = ms.slice(0, 8);
+
     body.innerHTML = ms.map(m => {
       const sc = (m.home_score==null||m.away_score==null) ? '–' : `${m.home_score}–${m.away_score}`;
-      return `<div class="score-row">
-        <span class="teams">${m.home} <span class="st">v</span> ${m.away}</span>
-        <span class="sc">${sc} <span class="st">${m.status||''}</span></span>
+      const st = m._st;
+      const stHtml = st.state==='live'
+        ? `<span class="st-live"><span class="live-dot"></span>${st.label}</span>`
+        : `<span class="st ${st.state==='done'?'st-done':'st-soon'}">${st.label}</span>`;
+      return `<div class="score-row${st.state==='live'?' row-live':''}">
+        <span class="teams">${m.home} <span class="vs">v</span> ${m.away}</span>
+        <span class="sc">${sc} ${stHtml}</span>
       </div>`;
     }).join('');
   }catch(e){ body.innerHTML = `<div class="empty">Couldn't reach the score service.</div>`; }
