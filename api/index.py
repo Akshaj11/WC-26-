@@ -83,8 +83,23 @@ INDEX_HTML = r"""<!doctype html>
   .pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
   .pill{font:600 12px/1 inherit;border:1px solid var(--rule);border-radius:20px;padding:6px 11px;background:var(--paper2)}
 
+  /* tappable candidate-city cards for knockout rounds */
+  .candi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:9px}
+  .candi{border:1.5px solid var(--rule);border-radius:9px;background:var(--paper2);overflow:hidden}
+  .candi-head{width:100%;display:flex;align-items:center;gap:7px;padding:10px 11px;background:none;border:none;
+    cursor:pointer;font:700 13px/1.1 inherit;color:var(--ink);text-align:left}
+  .candi-head:hover{background:#fff}
+  .candi-city{flex:1}
+  .candi-flag{font:700 9px/1 inherit;letter-spacing:.06em;border:1px solid var(--rule);border-radius:4px;padding:2px 5px;color:var(--muted)}
+  .candi-caret{color:var(--pitch);font-size:11px}
+  .candi-body{padding:0 11px 11px;border-top:1px solid var(--rule)}
+
+  /* countdown chip */
+  .cd{font:700 10px/1 inherit;letter-spacing:.04em;color:var(--pitch);margin-left:6px;text-transform:none}
+  .cd-live{color:var(--live)}
+
   .actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
-  .actions button{padding:8px 12px;font-size:12px;letter-spacing:.06em;background:#fff;color:var(--ink);border:1.5px solid var(--ink);border-radius:7px}
+  .actions button{padding:8px 12px;font-size:12px;letter-spacing:.06em;background:#fff;color:var(--ink);border:1.5px solid var(--ink);border-radius:7px;cursor:pointer}
   .actions button:hover{background:var(--ink);color:var(--paper2)}
   .panel{margin-top:10px;border:1px solid var(--rule);border-radius:8px;background:#fff;padding:11px 13px;font-size:13px}
   .panel h4{margin:0 0 7px;font:700 11px/1 inherit;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
@@ -98,6 +113,18 @@ INDEX_HTML = r"""<!doctype html>
   .fresh.stale{background:#f6e3c8;color:#9a6a16}
   .ticket-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
   .ticket-links a{font:600 13px inherit;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+
+  /* stadium facts grid */
+  .sfacts{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin:4px 0 8px}
+  .sfacts span{font-size:13px}
+  .sfacts .lbl{display:block;font:700 9px/1 inherit;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+  .snote{font-size:13px;color:var(--ink);line-height:1.5;border-top:1px solid #f0e8d6;padding-top:8px}
+
+  /* share button + button pair */
+  .btn-pair{display:flex;gap:8px}
+  .btn-pair #go{flex:2}
+  .ghost{flex:1;background:#fff;color:var(--ink);border:1.5px solid var(--ink)!important}
+  .ghost:hover{background:var(--ink);color:var(--paper2)}
 
   footer{margin-top:36px;border-top:1px solid var(--rule);padding-top:14px;font-size:12px;color:var(--muted)}
   .foot-sources{display:block;margin-top:9px;font-size:11px;opacity:.8}
@@ -144,7 +171,7 @@ INDEX_HTML = r"""<!doctype html>
       <label for="adults">Travellers</label>
       <select id="adults"><option>1</option><option>2</option><option>3</option><option>4</option></select>
     </div>
-    <div class="go-row"><button id="go">Plot the road ahead</button></div>
+    <div class="go-row btn-pair"><button id="go">Plot the road ahead</button><button id="share" class="ghost">Share route</button></div>
   </div>
 
   <section class="route" id="route">
@@ -172,6 +199,57 @@ const HOME_ZONES = [
   ['Sydney','Australia/Sydney'],
 ];
 
+// Approximate first-match date per round (WC26 schedule). Used for countdowns.
+const ROUND_DATES = {
+  group: '2026-06-11', r32: '2026-06-28', r16: '2026-07-04',
+  qf: '2026-07-09', sf: '2026-07-14', final: '2026-07-19',
+};
+
+function countdownHtml(round){
+  const d = ROUND_DATES[round];
+  if(!d) return '';
+  return ` <span class="cd" data-date="${d}"></span>`;
+}
+
+let cdTimer = null;
+function startCountdowns(){
+  if(cdTimer) clearInterval(cdTimer);
+  const tick = () => {
+    document.querySelectorAll('.cd').forEach(el => {
+      const target = new Date(el.dataset.date + 'T18:00:00Z').getTime();
+      const diff = target - Date.now();
+      if(diff <= 0){ el.textContent = '· live window'; el.classList.add('cd-live'); return; }
+      const days = Math.floor(diff/86400000);
+      const hrs = Math.floor((diff%86400000)/3600000);
+      el.textContent = days > 0 ? `· in ${days}d ${hrs}h` : `· in ${hrs}h`;
+    });
+  };
+  tick();
+  cdTimer = setInterval(tick, 60000);
+}
+
+function shareRoute(){
+  const params = new URLSearchParams({
+    g: $('#group').value, f: $('#finish').value, c: $('#city').value,
+    tz: $('#tz').value, d: $('#depart').value, a: $('#adults').value,
+  });
+  const url = location.origin + location.pathname + '?' + params.toString();
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = $('#share'); const orig = btn.textContent;
+    btn.textContent = 'Link copied ✓';
+    setTimeout(() => btn.textContent = orig, 1800);
+  }).catch(() => prompt('Copy your route link:', url));
+}
+
+function applyShared(){
+  const p = new URLSearchParams(location.search);
+  if(!p.has('g')) return false;
+  const set = (id, key) => { const el = $(id); if(el && p.get(key)!=null) el.value = p.get(key); };
+  set('#group','g'); set('#finish','f'); set('#city','c');
+  set('#tz','tz'); set('#depart','d'); set('#adults','a');
+  return true;
+}
+
 async function boot(){
   const meta = await (await fetch('/api/meta')).json();
   VENUES = meta.venues; VENUES.forEach(v => BYKEY[v.key] = v);
@@ -186,8 +264,13 @@ async function boot(){
   HOME_ZONES.forEach(([l,z]) => tz.add(new Option('Home · ' + l, z)));
 
   $('#go').addEventListener('click', plot);
+  const shareBtn = $('#share');
+  if(shareBtn) shareBtn.addEventListener('click', shareRoute);
   loadScores();
   setInterval(loadScores, 60000); // refresh scores each minute
+
+  // If opened from a shared link, restore selections and plot automatically.
+  if(applyShared()) plot();
 }
 
 async function loadScores(){
@@ -233,7 +316,7 @@ async function plot(){
 function render(d){
   const root = $('#route');
   let html = `<div class="summary"><span class="big">The road ahead</span>
-    <span class="km" style="font:700 13px ui-monospace,Menlo;color:var(--pitch)">tap any stop for prices</span></div>`;
+    <span class="km" style="font:700 13px ui-monospace,Menlo;color:var(--pitch)">tap any city for options</span></div>`;
 
   d.steps.forEach((step, i) => {
     if(step.certain){
@@ -241,43 +324,83 @@ function render(d){
       const leg = v.leg;
       const legTxt = leg.same_city ? 'Same city — no travel'
         : `<b>${leg.distance_mi} mi</b> from your last stop${leg.cross_border?' · ✈ cross-border':''}`;
+      const cd = countdownHtml(step.round);
       html += `<div class="stop exact" style="animation-delay:${i*70}ms"><span class="dot"></span>
-        <div class="round">${step.round_label}</div>
+        <div class="round">${step.round_label}${cd}</div>
         <div class="city-line"><span class="city">${v.city}</span>
           <span class="stadium">${v.stadium}</span><span class="flagtag">${v.country}</span></div>
         <div class="meta">${legTxt}${v.sample_kickoff_home?` · sample kickoff in your zone <b>${v.sample_kickoff_home}</b>`:''}</div>
-        ${actionsFor(v, leg, step.round_label, i)}
-        <div class="panel-host" id="ph-${i}"></div>
+        ${cityActions(v, leg, step.round_label, i+'-'+v.key)}
+        <div class="panel-host" id="ph-${i}-${v.key}"></div>
       </div>`;
     } else {
-      const names = step.cities.map(c => `<span class="pill">${c.city}</span>`).join('');
+      const cd = countdownHtml(step.round);
+      // Every candidate city is now its own tappable mini-card.
+      const cards = step.cities.map(c => {
+        const pid = i+'-'+c.key;
+        return `<div class="candi">
+          <button class="candi-head" onclick="toggleCity('${pid}')">
+            <span class="candi-city">${c.city}</span>
+            <span class="candi-flag">${c.country}</span>
+            <span class="candi-caret" id="caret-${pid}">▸</span>
+          </button>
+          <div class="candi-body" id="body-${pid}" style="display:none">
+            <div class="meta" style="margin:2px 0 8px">${c.stadium}</div>
+            ${cityActions(c, c.leg, step.round_label, pid)}
+            <div class="panel-host" id="ph-${pid}"></div>
+          </div>
+        </div>`;
+      }).join('');
       html += `<div class="stop" style="animation-delay:${i*70}ms"><span class="dot"></span>
-        <div class="round">${step.round_label}</div>
-        <div class="meta">Exact city set by the bracket draw — possible venues:</div>
-        <div class="pills">${names}</div></div>`;
+        <div class="round">${step.round_label}${cd}</div>
+        <div class="meta">Exact city set by the bracket draw — tap a possible venue to explore it:</div>
+        <div class="candi-grid">${cards}</div></div>`;
     }
   });
   root.innerHTML = html;
+  startCountdowns();
 }
 
-function actionsFor(v, leg, roundLabel, i){
-  const canFly = !leg.same_city;
+function toggleCity(pid){
+  const body = document.getElementById('body-'+pid);
+  const caret = document.getElementById('caret-'+pid);
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  caret.textContent = open ? '▸' : '▾';
+}
+
+function cityActions(v, leg, roundLabel, pid){
+  const canFly = leg && !leg.same_city && leg.origin_iata && leg.dest_iata;
+  const si = v.stadium_info || {};
   return `<div class="actions">
-    ${canFly?`<button onclick="lookupFlights('${leg.origin_iata}','${leg.dest_iata}',${i})">Flight prices</button>`:''}
-    <button onclick="lookupHotels('${v.key}',${i})">Find hotels</button>
-    <button onclick="lookupTickets('${v.key}','${roundLabel}',${i})">Tickets</button>
+    ${canFly?`<button onclick="lookupFlights('${leg.origin_iata}','${leg.dest_iata}','${pid}')">Flight prices</button>`:''}
+    <button onclick="lookupHotels('${v.key}','${pid}')">Find hotels</button>
+    <button onclick="lookupTickets('${v.key}','${roundLabel}','${pid}')">Tickets</button>
+    ${si.capacity?`<button onclick="showStadium('${v.key}','${pid}')">Stadium info</button>`:''}
   </div>`;
 }
 
-function panel(i){ return $('#ph-'+i); }
-function setPanel(i, html){ panel(i).innerHTML = `<div class="panel">${html}</div>`; }
+function panel(pid){ return document.getElementById('ph-'+pid); }
+function setPanel(pid, html){ const p = panel(pid); if(p) p.innerHTML = `<div class="panel">${html}</div>`; }
 
-async function lookupFlights(origin, dest, i){
-  setPanel(i, `<h4>Flights ${origin} → ${dest}</h4><div class="empty">Checking fares…</div>`);
+function showStadium(cityKey, pid){
+  const v = BYKEY[cityKey]; const si = (v && v.stadium_info) || {};
+  if(!si.capacity){ return setPanel(pid, `<div class="notcfg">No stadium details available.</div>`); }
+  setPanel(pid, `<h4>${v.stadium}</h4>
+    <div class="sfacts">
+      <span><span class="lbl">FIFA name</span> ${si.fifa_name||v.stadium}</span>
+      <span><span class="lbl">Capacity</span> ${si.capacity.toLocaleString()}</span>
+      <span><span class="lbl">Usual tenant</span> ${si.tenant||'—'}</span>
+      <span><span class="lbl">Roof</span> ${si.roof||'—'}</span>
+      <span><span class="lbl">Region</span> ${si.region||'—'}</span>
+    </div>
+    <div class="snote">${si.note||''}</div>`);
+}
+
+async function lookupFlights(origin, dest, pid){
+  setPanel(pid, `<h4>Flights ${origin} → ${dest}</h4><div class="empty">Checking fares…</div>`);
   const date = $('#depart').value, adults = $('#adults').value;
   const d = await (await fetch(`/api/flights?origin=${origin}&dest=${dest}&date=${date}&adults=${adults}`)).json();
-
-  // Cached-price section (only if a token is set AND real fares came back)
   let priceHtml = '';
   if(d.configured && d.offers && d.offers.length){
     priceHtml = `<div class="subnote">Cached recent fares — real prices people saw, not a live quote:</div>` +
@@ -291,32 +414,29 @@ async function lookupFlights(origin, dest, i){
   } else {
     priceHtml = `<div class="notcfg">${d.message||'No cached fares — check the live search below.'}</div>`;
   }
-
-  // Live-search links always render
   const links = (d.live_links||[]).map(l =>
     `<a href="${l.url}" target="_blank" rel="noopener">${l.site} ↗</a>`).join('');
-
-  setPanel(i, `<h4>Flights ${origin} → ${dest} · ${date}</h4>
+  setPanel(pid, `<h4>Flights ${origin} → ${dest} · ${date}</h4>
     ${priceHtml}
     <div class="subnote">See live fares:</div>
     <div class="ticket-links">${links}</div>`);
 }
 
-async function lookupHotels(cityKey, i){
-  setPanel(i, `<h4>Hotels</h4><div class="empty">Finding searches…</div>`);
+async function lookupHotels(cityKey, pid){
+  setPanel(pid, `<h4>Hotels</h4><div class="empty">Finding searches…</div>`);
   const ci = $('#depart').value;
   const co = new Date(new Date(ci).getTime()+86400000).toISOString().slice(0,10);
   const adults = $('#adults').value;
   const d = await (await fetch(`/api/hotels?city=${cityKey}&check_in=${ci}&check_out=${co}&adults=${adults}`)).json();
   const links = (d.links||[]).map(l =>
     `<a href="${l.url}" target="_blank" rel="noopener">${l.site} ↗</a>`).join('');
-  setPanel(i, `<h4>Hotels · ${ci} → ${co}</h4>
+  setPanel(pid, `<h4>Hotels · ${ci} → ${co}</h4>
     <div class="subnote">${d.note||'Live listings for your dates:'}</div>
     <div class="ticket-links">${links}</div>`);
 }
 
-async function lookupTickets(cityKey, roundLabel, i){
-  setPanel(i, `<h4>Tickets</h4><div class="empty">Finding listings…</div>`);
+async function lookupTickets(cityKey, roundLabel, pid){
+  setPanel(pid, `<h4>Tickets</h4><div class="empty">Finding listings…</div>`);
   const d = await (await fetch(`/api/tickets?city=${cityKey}&round=${encodeURIComponent(roundLabel)}`)).json();
   let html = `<h4>Tickets · ${roundLabel}</h4>`;
   if(d.events && d.events.length){
@@ -327,7 +447,7 @@ async function lookupTickets(cityKey, roundLabel, i){
   html += `<div class="ticket-links">` +
     d.links.map(l => `<a href="${l.url}" target="_blank" rel="noopener">${l.site} ↗</a>`).join('') +
     `</div>`;
-  setPanel(i, html);
+  setPanel(pid, html);
 }
 
 boot();
