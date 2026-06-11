@@ -42,6 +42,34 @@ VENUES = {
 
 COUNTRY_NAMES = {"US": "United States", "MX": "Mexico", "CA": "Canada"}
 
+# Stadium detail for fans. Capacities are FIFA tournament-config figures (approx,
+# can shift with overlay). fifa_name = neutral name used during the tournament.
+# tenant = usual occupant. region = FIFA's travel region grouping. roof/notes
+# give a quick feel for the venue.
+STADIUM_INFO = {
+    "nyc":         {"fifa_name": "New York New Jersey Stadium", "capacity": 82500, "tenant": "NY Giants / NY Jets (NFL)", "region": "Eastern", "roof": "Open air", "note": "Hosts the Final on July 19. ~8 mi from Manhattan; NJ Transit to Meadowlands on match days."},
+    "philly":      {"fifa_name": "Philadelphia Stadium",        "capacity": 69000, "tenant": "Philadelphia Eagles (NFL)", "region": "Eastern", "roof": "Open air", "note": "In the South Philly sports complex; Broad Street Line subway runs right to it."},
+    "boston":      {"fifa_name": "Boston Stadium",              "capacity": 65000, "tenant": "New England Patriots (NFL)", "region": "Eastern", "roof": "Open air", "note": "In Foxborough, ~30 mi from Boston; special event trains from South Station."},
+    "miami":       {"fifa_name": "Miami Stadium",               "capacity": 65000, "tenant": "Miami Dolphins (NFL)", "region": "Eastern", "roof": "Canopy over seats", "note": "Hosts the third-place playoff. In Miami Gardens, ~16 mi north of downtown."},
+    "atlanta":     {"fifa_name": "Atlanta Stadium",             "capacity": 75000, "tenant": "Atlanta Falcons (NFL)", "region": "Eastern", "roof": "Retractable", "note": "Hosts a semi-final. Downtown, served by MARTA rail (GWCC/CNN Center)."},
+    "kansascity":  {"fifa_name": "Kansas City Stadium",         "capacity": 73000, "tenant": "Kansas City Chiefs (NFL)", "region": "Central", "roof": "Open air", "note": "Famous for being one of the loudest stadiums in sport; big tailgating culture."},
+    "dallas":      {"fifa_name": "Dallas Stadium",              "capacity": 94000, "tenant": "Dallas Cowboys (NFL)", "region": "Central", "roof": "Retractable", "note": "The tournament's largest venue and a semi-final host. In Arlington, between Dallas & Fort Worth."},
+    "houston":     {"fifa_name": "Houston Stadium",             "capacity": 72000, "tenant": "Houston Texans (NFL)", "region": "Central", "roof": "Retractable", "note": "Climate-controlled comfort in the Texas summer; METRORail to the stadium district."},
+    "seattle":     {"fifa_name": "Seattle Stadium",             "capacity": 69000, "tenant": "Seattle Seahawks (NFL)", "region": "Western", "roof": "Partial cover", "note": "Walkable from downtown Seattle; light rail stops nearby."},
+    "bayarea":     {"fifa_name": "San Francisco Bay Area Stadium", "capacity": 71000, "tenant": "San Francisco 49ers (NFL)", "region": "Western", "roof": "Open air", "note": "In Santa Clara, ~45 mi south of SF; VTA light rail and Caltrain access."},
+    "la":          {"fifa_name": "Los Angeles Stadium",         "capacity": 70000, "tenant": "LA Rams / LA Chargers (NFL)", "region": "Western", "roof": "Fixed canopy", "note": "Ultra-modern venue in Inglewood, near LAX; Metro K Line serves the area."},
+    "toronto":     {"fifa_name": "Toronto Stadium",             "capacity": 43000, "tenant": "Toronto FC (MLS)", "region": "Eastern", "roof": "Open air", "note": "The tournament's most intimate venue; on the lakefront, streetcar access from downtown."},
+    "vancouver":   {"fifa_name": "Vancouver Stadium",           "capacity": 54000, "tenant": "BC Lions (CFL) / Whitecaps", "region": "Western", "roof": "Retractable", "note": "Right downtown; SkyTrain Stadium–Chinatown station at the door."},
+    "mexicocity":  {"fifa_name": "Mexico City Stadium",         "capacity": 80824, "tenant": "Club América / Cruz Azul", "region": "Central", "roof": "Open air", "note": "Hosts the opening match. The only stadium to host three World Cups; at 2,200m altitude."},
+    "guadalajara": {"fifa_name": "Guadalajara Stadium",         "capacity": 48000, "tenant": "C.D. Guadalajara (Chivas)", "region": "Central", "roof": "Open air", "note": "Striking volcano-like design on the city's edge in Zapopan."},
+    "monterrey":   {"fifa_name": "Monterrey Stadium",           "capacity": 53500, "tenant": "C.F. Monterrey (Rayados)", "region": "Central", "roof": "Open air", "note": "Dramatic mountain backdrop of Cerro de la Silla; in Guadalupe, near Monterrey."},
+}
+
+
+def stadium_info(key: str) -> dict:
+    """Stadium detail for the info panel, or an empty dict if unknown."""
+    return STADIUM_INFO.get(key, {})
+
 
 def haversine_km(a: Venue, b: Venue) -> float:
     r = 6371.0
@@ -69,4 +97,5 @@ def venue_public(key: str) -> dict:
     v = VENUES[key]
     out = asdict(v); out["key"] = key
     out["country_name"] = COUNTRY_NAMES[v.country]
+    out["stadium_info"] = STADIUM_INFO.get(key, {})
     return out
