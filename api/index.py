@@ -218,6 +218,13 @@ INDEX_HTML = r"""<!doctype html>
   .cost-line .cost-amt{font-size:12px}
   .cost-basis{font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;border-top:1px solid #f0e8d6;padding-top:6px}
   .cost-foot{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+  .live-pill{display:inline-block;font:800 9px/1 inherit;letter-spacing:.08em;background:var(--pitch);color:#fff;
+    border-radius:20px;padding:3px 7px;margin-left:6px;vertical-align:middle;text-transform:uppercase}
+  .live-tag{display:inline-block;font:800 9px/1 inherit;letter-spacing:.05em;background:var(--pitch-soft);color:var(--pitch-dark);
+    border-radius:4px;padding:2px 5px;margin-left:4px;vertical-align:middle}
+  .rate{color:var(--muted);font-weight:600;font-size:11px}
+  .maybe-tag{display:inline-block;font:700 9px/1 inherit;color:var(--muted);border:1px solid var(--rule);
+    border-radius:4px;padding:2px 4px;margin-left:3px;vertical-align:middle;text-transform:uppercase}
   @media (max-width:520px){.cost-inputs{grid-template-columns:1fr}.cost-total-lbl{max-width:100%}}
 
   footer{margin-top:36px;border-top:1px solid var(--rule);padding-top:14px;font-size:12px;color:var(--muted)}
@@ -283,11 +290,11 @@ INDEX_HTML = r"""<!doctype html>
         <select id="nights"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select>
       </div>
       <div>
-        <label for="budget">Your nightly hotel budget (USD)</label>
-        <input type="number" id="budget" value="150" min="0" step="10">
+        <label for="budget">Nightly hotel budget — blank = real city rates</label>
+        <input type="number" id="budget" placeholder="Use real WC26 rates" min="0" step="10">
       </div>
       <div class="cost-toggle">
-        <label><input type="checkbox" id="incflights" checked> Include flight estimates</label>
+        <label><input type="checkbox" id="incflights" checked> Include flights (live fares where available)</label>
       </div>
       <button id="calc">Estimate trip cost</button>
     </div>
@@ -373,11 +380,13 @@ async function estimateCost(){
   const out = $('#cost-result');
   const calcBtn = $('#calc'); const orig = calcBtn.textContent;
   calcBtn.disabled = true; calcBtn.textContent = 'Estimating…';
+  const budgetRaw = $('#budget').value.trim();
   const payload = {
     group: $('#group').value, finish: $('#finish').value, group_city: $('#city').value,
     nights_per_stop: parseInt($('#nights').value, 10),
-    nightly_budget: parseFloat($('#budget').value || '0'),
+    nightly_budget: budgetRaw === '' ? null : parseFloat(budgetRaw),
     include_flights: $('#incflights').checked,
+    travel_date: $('#depart').value,
   };
   try {
     const d = await (await fetch('/api/cost', {method:'POST',
@@ -385,30 +394,49 @@ async function estimateCost(){
     if(d.error){ out.innerHTML = `<div class="notcfg">${d.error}</div>`; return; }
     const usd = n => '$' + Math.round(n).toLocaleString();
     const t = d.tickets, h = d.hotels, fl = d.flights, g = d.grand;
+
     const ticketRows = t.lines.map(l =>
       `<div class="cost-line"><span>${l.round}${l.matches>1?` ×${l.matches}`:''}</span>
        <span class="cost-amt">${usd(l.low)}–${usd(l.high)}</span></div>`).join('');
+
+    // Per-city hotel breakdown
+    const hotelRows = (h.lines||[]).map(l =>
+      `<div class="cost-line"><span>${l.city} · ${l.nights}n${l.known?'':' <span class="maybe-tag">possible</span>'}</span>
+       <span class="cost-amt">${usd(l.cost)} <span class="rate">($${l.rate}/n)</span></span></div>`).join('');
+
+    // Flight legs with LIVE markers
+    let flightRows = '';
+    if(fl.legs && fl.legs.length){
+      flightRows = fl.legs.map(l => {
+        const amt = l.low === l.high ? usd(l.low) : `${usd(l.low)}–${usd(l.high)}`;
+        const tag = l.live ? `<span class="live-tag">LIVE${l.seen?' · '+l.seen:''}</span>` : '';
+        return `<div class="cost-line"><span>→ ${l.to} ${tag}</span><span class="cost-amt">${amt}</span></div>`;
+      }).join('');
+    }
     const flightBlock = fl.included ? `
       <div class="cost-cat">
-        <div class="cost-cat-head"><span>✈ Flights</span><span class="cost-amt">${usd(fl.low)}–${usd(fl.high)}</span></div>
+        <div class="cost-cat-head"><span>✈️ Flights ${fl.any_live?'<span class="live-pill">LIVE fares</span>':''}</span><span class="cost-amt">${usd(fl.low)}–${usd(fl.high)}</span></div>
+        ${flightRows}
         <div class="cost-basis">${fl.basis}</div>
       </div>` : '';
+
     out.innerHTML = `
       <div class="cost-total">
         <span class="cost-total-lbl">Estimated total if they reach the Final</span>
         <span class="cost-total-amt">${usd(g.low)} – ${usd(g.high)}</span>
       </div>
       <div class="cost-cat">
-        <div class="cost-cat-head"><span>🎟 Tickets</span><span class="cost-amt">${usd(t.low)}–${usd(t.high)}</span></div>
+        <div class="cost-cat-head"><span>🎟️ Tickets</span><span class="cost-amt">${usd(t.low)}–${usd(t.high)}</span></div>
         ${ticketRows}
         <div class="cost-basis">${t.basis}</div>
       </div>
       <div class="cost-cat">
-        <div class="cost-cat-head"><span>🏨 Hotels</span><span class="cost-amt">${usd(h.total)}</span></div>
-        <div class="cost-basis">${h.stops} stops × ${h.nights_per_stop} nights × ${usd(h.nightly_budget)}/night</div>
+        <div class="cost-cat-head"><span>🏨 Hotels ${h.using_real_rates?'<span class="live-pill">real city rates</span>':''}</span><span class="cost-amt">${usd(h.total)}</span></div>
+        ${hotelRows}
+        <div class="cost-basis">${h.basis}</div>
       </div>
       ${flightBlock}
-      <div class="cost-foot">Estimates only. Tickets use FIFA's published base bands (dynamic pricing); hotels use your budget; flights are distance-based planning figures, not live quotes.</div>`;
+      <div class="cost-foot">Tickets use FIFA's published base bands (dynamic pricing). Hotels use ${h.using_real_rates?"real per-city WC26 tournament rates":"your set budget"}. Flights show real cached fares where available (marked LIVE), otherwise a distance-based estimate.</div>`;
   } catch(e){
     out.innerHTML = `<div class="notcfg">Couldn't estimate just now — please try again.</div>`;
   } finally {
@@ -779,13 +807,24 @@ def h_cost(q, b):
     group=b.get("group","A"); finish=b.get("finish","win")
     gc=b.get("group_city","nyc")
     if gc not in venues.VENUES: return {"error":"Unknown city"}
+    nights = b.get("nights_per_stop", 2)
     try:
-        nights=int(b.get("nights_per_stop",2))
-        budget=float(b.get("nightly_budget",150))
+        nights = int(nights)
     except (TypeError, ValueError):
-        return {"error":"nights_per_stop and nightly_budget must be numbers"}
+        return {"error":"nights_per_stop must be a number"}
+    # budget is OPTIONAL: if omitted/blank, use real per-city WC26 rates.
+    budget = b.get("nightly_budget", None)
+    if budget in ("", None):
+        budget = None
+    else:
+        try:
+            budget = float(budget)
+        except (TypeError, ValueError):
+            return {"error":"nightly_budget must be a number or blank"}
     include_flights = bool(b.get("include_flights", True))
-    # Build the path with legs (same logic as h_path, legs only need distance)
+    travel_date = b.get("travel_date", "")
+
+    # Build the path with legs
     prev=gc; steps=[]
     for st in bracket.path_for_team(group,finish,gc):
         cs=[]
@@ -793,7 +832,37 @@ def h_cost(q, b):
             v=venues.venue_public(ck); v["leg"]=venues.distance_between(prev,ck); cs.append(v)
         if st["certain"]: prev=st["cities"][0]
         steps.append({**st,"cities":cs})
-    return costs.estimate(steps, nights, budget, include_flights=include_flights)
+
+    # Fetch REAL cached fares for the confirmed legs (only the certain ones,
+    # to keep it to a couple of provider calls). Keyed by "origin->dest".
+    live_fares = {}
+    if include_flights and travel_date:
+        seen_keys = set()
+        for st in steps:
+            if not st["certain"]:
+                continue
+            leg = st["cities"][0].get("leg") or {}
+            o, dst = leg.get("origin_iata"), leg.get("dest_iata")
+            if not o or not dst or leg.get("same_city"):
+                continue
+            fkey = f"{o}->{dst}"
+            if fkey in seen_keys:
+                continue
+            seen_keys.add(fkey)
+            try:
+                res = flights.search_flights(o, dst, travel_date)
+                if res.get("configured") and res.get("cheapest"):
+                    c = res["cheapest"]
+                    live_fares[fkey] = {
+                        "price": c.get("price"),
+                        "airline": c.get("airline", ""),
+                        "found": (c.get("freshness") or {}).get("label", ""),
+                    }
+            except Exception:
+                pass  # fall back to estimate band; never fabricate
+
+    return costs.estimate(steps, nights, nightly_budget=budget,
+                          include_flights=include_flights, live_fares=live_fares)
 
 ROUTES={"/api/meta":h_meta,"/api/path":h_path,"/api/flights":h_flights,
         "/api/hotels":h_hotels,"/api/scores":h_scores,"/api/tickets":h_tickets,
