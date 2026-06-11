@@ -19,65 +19,101 @@ INDEX_HTML = r"""<!doctype html>
 <title>Follow My Team — WC26</title>
 <style>
   :root{
-    --ink:#13243b; --paper:#f3ede1; --paper2:#fff8ec; --pitch:#1f7a4d;
-    --pitch-soft:#d6e8dc; --flag:#e4572e; --muted:#6b7a8d; --rule:#c9bfa8;
-    --live:#d12d2d;
+    --ink:#0a1f14;            /* deep pitch-night green-black */
+    --paper:#f4f7f2;          /* clean off-white field chalk */
+    --paper2:#ffffff;
+    --pitch:#0f8a4d;          /* vivid grass green */
+    --pitch-dark:#0a6e3c;
+    --pitch-soft:#d4ede0;
+    --grass1:#0e7a45;         /* mowed-stripe greens for hero */
+    --grass2:#0c6e3e;
+    --flag:#e8472b;           /* signal red-orange */
+    --gold:#f4c430;           /* trophy gold accent */
+    --muted:#5e7468; --rule:#cdded4;
+    --live:#e8112d;
   }
   *{box-sizing:border-box}
   html,body{margin:0}
   body{
-    background:
-      repeating-linear-gradient(90deg,transparent 0 38px,rgba(19,36,59,.025) 38px 39px),
-      var(--paper);
-    color:var(--ink); font-family:"Helvetica Neue",Arial,sans-serif; line-height:1.5;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Helvetica Neue",Arial,sans-serif; line-height:1.5;
   }
-  .wrap{max-width:820px;margin:0 auto;padding:24px 16px 80px}
-  header{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:18px}
-  .kicker{font:600 12px/1 inherit;letter-spacing:.32em;text-transform:uppercase;color:var(--flag)}
-  h1{font:800 32px/1.02 inherit;letter-spacing:-.02em;margin:10px 0 4px}
-  .sub{color:var(--muted);font-size:14px;max-width:56ch}
+  .wrap{max-width:840px;margin:0 auto;padding:0 16px 80px}
 
-  /* live scores ticker */
-  .scores{margin:18px 0;border:1.5px solid var(--ink);border-radius:10px;background:var(--paper2);overflow:hidden}
-  .scores h2{font:700 11px/1 inherit;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
-    margin:0;padding:11px 14px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:8px}
-  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--live);display:inline-block;
-    animation:pulse 1.6s infinite}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  /* HERO — tournament banner with mowed-pitch stripes */
+  header{
+    margin:0 -16px 20px; padding:30px 24px 26px; position:relative; overflow:hidden;
+    background:
+      repeating-linear-gradient(90deg, var(--grass1) 0 46px, var(--grass2) 46px 92px);
+    color:#fff;
+    border-bottom:4px solid var(--gold);
+  }
+  header::after{ /* subtle vignette + center-circle hint */
+    content:""; position:absolute; inset:0;
+    background:
+      radial-gradient(circle at 88% 30%, rgba(255,255,255,.10) 0 70px, transparent 72px),
+      linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.28));
+    pointer-events:none;
+  }
+  header > *{position:relative;z-index:1}
+  .kicker{font:800 12px/1 inherit;letter-spacing:.28em;text-transform:uppercase;color:var(--gold);
+    display:flex;align-items:center;gap:9px}
+  .kicker::before{content:"⚽";font-size:15px;letter-spacing:0}
+  h1{font:900 38px/1 inherit;letter-spacing:-.025em;margin:12px 0 6px;text-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .sub{color:rgba(255,255,255,.92);font-size:14px;max-width:54ch}
+
+  /* live scores — stadium scoreboard feel */
+  .scores{margin:18px 0;border-radius:12px;background:var(--ink);overflow:hidden;
+    box-shadow:0 6px 20px rgba(10,31,20,.18)}
+  .scores h2{font:800 11px/1 inherit;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);
+    margin:0;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:9px}
+  .live-dot{width:9px;height:9px;border-radius:50%;background:var(--live);display:inline-block;
+    box-shadow:0 0 0 0 rgba(232,17,45,.6);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,17,45,.6)}70%{box-shadow:0 0 0 7px rgba(232,17,45,0)}100%{box-shadow:0 0 0 0 rgba(232,17,45,0)}}
   @media (prefers-reduced-motion:reduce){.live-dot{animation:none}}
-  .score-row{display:flex;justify-content:space-between;gap:10px;padding:9px 14px;border-bottom:1px solid #eadfc8;font-size:14px}
+  .score-row{display:flex;justify-content:space-between;gap:10px;padding:11px 16px;
+    border-bottom:1px solid rgba(255,255,255,.08);font-size:14px;color:#eaf3ee}
   .score-row:last-child{border-bottom:none}
   .score-row .teams{font-weight:600}
-  .score-row .sc{font:700 14px ui-monospace,Menlo,monospace}
-  .score-row .st{color:var(--muted);font-size:12px}
-  .empty{padding:14px;font-size:13px;color:var(--muted);font-style:italic}
+  .score-row .sc{font:800 15px ui-monospace,Menlo,monospace;color:#fff}
+  .score-row .st{color:var(--gold);font-size:11px;font-weight:700}
+  .empty{padding:14px 16px;font-size:13px;color:rgba(234,243,238,.6);font-style:italic}
 
-  .stub{margin-top:6px;border:1.5px solid var(--ink);background:var(--paper2);border-radius:10px;
-    padding:16px;display:grid;gap:13px;grid-template-columns:1fr 1fr}
+  .stub{margin-top:6px;border:none;background:var(--paper2);border-radius:14px;
+    padding:18px;display:grid;gap:13px;grid-template-columns:1fr 1fr;
+    box-shadow:0 4px 16px rgba(10,31,20,.08);border-top:4px solid var(--pitch)}
   .stub .full{grid-column:1/-1}
-  label{display:block;font:700 11px/1 inherit;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-  select,input[type=date]{width:100%;padding:11px 12px;border:1.5px solid var(--rule);border-radius:7px;background:#fff;font-size:15px;color:var(--ink)}
+  label{display:block;font:800 11px/1 inherit;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  select,input[type=date]{width:100%;padding:11px 12px;border:1.5px solid var(--rule);border-radius:8px;background:#fff;font-size:15px;color:var(--ink)}
   select:focus,input:focus{outline:3px solid var(--pitch-soft);border-color:var(--pitch)}
-  button{padding:13px;border:none;border-radius:8px;background:var(--ink);color:var(--paper2);font:800 15px/1 inherit;letter-spacing:.04em;cursor:pointer}
-  button:hover{background:#0c1929}
-  button:focus-visible{outline:3px solid var(--flag);outline-offset:2px}
+  button{padding:13px;border:none;border-radius:9px;background:var(--pitch);color:#fff;font:800 15px/1 inherit;letter-spacing:.03em;cursor:pointer;transition:transform .08s,background .15s}
+  button:hover{background:var(--pitch-dark)}
+  button:active{transform:translateY(1px)}
+  button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   .go-row{grid-column:1/-1}
   .go-row button{width:100%}
 
-  .route{margin-top:28px}
-  .summary{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dashed var(--rule);padding-bottom:8px;margin-bottom:6px}
-  .summary .big{font:800 18px/1 inherit}
-  .stop{position:relative;padding:18px 0 18px 42px;opacity:0;transform:translateY(8px);animation:rise .45s ease forwards}
+  .route{margin-top:30px}
+  .summary{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .summary .big{font:900 22px/1 inherit;letter-spacing:-.02em}
+  .summary .big::before{content:"🏟 ";font-size:18px}
+  /* pitch-path timeline */
+  .stop{position:relative;padding:18px 0 18px 44px;opacity:0;transform:translateY(8px);animation:rise .45s ease forwards}
   @keyframes rise{to{opacity:1;transform:none}}
   @media (prefers-reduced-motion:reduce){.stop{animation:none;opacity:1;transform:none}}
-  .stop:not(:last-child)::before{content:"";position:absolute;left:13px;top:26px;bottom:-12px;width:2px;background:var(--pitch)}
-  .dot{position:absolute;left:6px;top:20px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--pitch)}
+  .stop:not(:last-child)::before{content:"";position:absolute;left:14px;top:28px;bottom:-12px;width:3px;
+    background:repeating-linear-gradient(180deg,var(--pitch) 0 8px,transparent 8px 14px)}
+  .dot{position:absolute;left:6px;top:20px;width:18px;height:18px;border-radius:50%;background:#fff;
+    border:3px solid var(--pitch);box-shadow:0 0 0 4px var(--pitch-soft)}
   .stop.exact .dot{background:var(--pitch)}
-  .round{font:700 11px/1 inherit;letter-spacing:.18em;text-transform:uppercase;color:var(--flag);margin-bottom:7px}
-  .city-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
-  .city{font:800 19px/1.1 inherit}
+  .stop.exact:last-child .dot{background:var(--gold);border-color:var(--gold);box-shadow:0 0 0 4px rgba(244,196,48,.3)}
+  .round{font:800 11px/1 inherit;letter-spacing:.16em;text-transform:uppercase;color:var(--pitch-dark);margin-bottom:8px;display:flex;align-items:center;gap:4px}
+  .ri{font-size:13px;letter-spacing:0}
+  .city-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:9px}
+  .city{font:900 21px/1.05 inherit;letter-spacing:-.01em}
   .stadium{color:var(--muted);font-size:13px}
-  .flagtag{font:700 10px/1 inherit;letter-spacing:.1em;border:1px solid var(--rule);border-radius:4px;padding:3px 6px;color:var(--muted)}
+  .flagtag{font:800 10px/1 inherit;letter-spacing:.08em;border:1.5px solid var(--pitch);border-radius:5px;padding:3px 6px;color:var(--pitch-dark);background:var(--pitch-soft)}
   .meta{margin-top:8px;font-size:13px;color:var(--muted)}
   .meta b{color:var(--ink)}
   .pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
@@ -99,8 +135,8 @@ INDEX_HTML = r"""<!doctype html>
   .cd-live{color:var(--live)}
 
   .actions{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
-  .actions button{padding:8px 12px;font-size:12px;letter-spacing:.06em;background:#fff;color:var(--ink);border:1.5px solid var(--ink);border-radius:7px;cursor:pointer}
-  .actions button:hover{background:var(--ink);color:var(--paper2)}
+  .actions button{padding:8px 12px;font-size:12px;letter-spacing:.04em;font-weight:700;background:#fff;color:var(--pitch-dark);border:1.5px solid var(--pitch);border-radius:8px;cursor:pointer}
+  .actions button:hover{background:var(--pitch);color:#fff}
   .panel{margin-top:10px;border:1px solid var(--rule);border-radius:8px;background:#fff;padding:11px 13px;font-size:13px}
   .panel h4{margin:0 0 7px;font:700 11px/1 inherit;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
   .offer{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #f0e8d6}
@@ -123,8 +159,8 @@ INDEX_HTML = r"""<!doctype html>
   /* share button + button pair */
   .btn-pair{display:flex;gap:8px}
   .btn-pair #go{flex:2}
-  .ghost{flex:1;background:#fff;color:var(--ink);border:1.5px solid var(--ink)!important}
-  .ghost:hover{background:var(--ink);color:var(--paper2)}
+  .ghost{flex:1;background:#fff;color:var(--pitch-dark);border:1.5px solid var(--pitch)!important}
+  .ghost:hover{background:var(--pitch-soft);color:var(--pitch-dark)}
 
   /* trip cost estimator */
   .cost-wrap{margin-top:28px;border:1.5px solid var(--ink);border-radius:12px;background:var(--paper2);padding:18px}
@@ -136,13 +172,14 @@ INDEX_HTML = r"""<!doctype html>
   .cost-inputs select,.cost-inputs input[type=number]{width:100%;padding:10px 11px;border:1.5px solid var(--rule);border-radius:7px;background:#fff;font-size:15px;color:var(--ink)}
   .cost-toggle{font-size:13px;color:var(--ink);display:flex;align-items:center}
   .cost-toggle label{text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink);display:flex;gap:7px;align-items:center;margin:0}
-  #calc{grid-column:1/-1;padding:12px;border:none;border-radius:8px;background:var(--pitch);color:#fff;font:800 14px/1 inherit;letter-spacing:.04em;cursor:pointer}
-  #calc:hover{background:#176039}
+  #calc{grid-column:1/-1;padding:13px;border:none;border-radius:9px;background:var(--gold);color:var(--ink);font:800 14px/1 inherit;letter-spacing:.04em;cursor:pointer}
+  #calc:hover{background:#e0b020}
   #cost-result{margin-top:16px}
   .cost-total{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
-    background:var(--ink);color:var(--paper2);border-radius:10px;padding:15px 17px;margin-bottom:13px}
+    background:linear-gradient(135deg,var(--pitch-dark),var(--pitch));color:#fff;border-radius:12px;
+    padding:16px 18px;margin-bottom:13px;border-left:5px solid var(--gold);box-shadow:0 6px 18px rgba(15,138,77,.25)}
   .cost-total-lbl{font:700 12px/1.3 inherit;letter-spacing:.04em;max-width:55%}
-  .cost-total-amt{font:800 24px/1 ui-monospace,Menlo,monospace;color:#fff}
+  .cost-total-amt{font:800 25px/1 ui-monospace,Menlo,monospace;color:var(--gold)}
   .cost-cat{border:1px solid var(--rule);border-radius:9px;background:#fff;padding:12px 14px;margin-bottom:10px}
   .cost-cat-head{display:flex;justify-content:space-between;font:800 15px/1 inherit;margin-bottom:6px}
   .cost-line{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding:3px 0}
@@ -251,6 +288,9 @@ const HOME_ZONES = [
 const ROUND_DATES = {
   group: '2026-06-11', r32: '2026-06-28', r16: '2026-07-04',
   qf: '2026-07-09', sf: '2026-07-14', final: '2026-07-19',
+};
+const ROUND_ICON = {
+  group: '🟢', r32: '⚔️', r16: '🔥', qf: '💥', sf: '🏟️', final: '🏆',
 };
 
 function countdownHtml(round){
@@ -425,7 +465,7 @@ function render(d){
         : `<b>${leg.distance_mi} mi</b> from your last stop${leg.cross_border?' · ✈ cross-border':''}`;
       const cd = countdownHtml(step.round);
       html += `<div class="stop exact" style="animation-delay:${i*70}ms"><span class="dot"></span>
-        <div class="round">${step.round_label}${cd}</div>
+        <div class="round"><span class="ri">${ROUND_ICON[step.round]||""}</span>${step.round_label}${cd}</div>
         <div class="city-line"><span class="city">${v.city}</span>
           <span class="stadium">${v.stadium}</span><span class="flagtag">${v.country}</span></div>
         <div class="meta">${legTxt}${v.sample_kickoff_home?` · sample kickoff in your zone <b>${v.sample_kickoff_home}</b>`:''}</div>
@@ -451,7 +491,7 @@ function render(d){
         </div>`;
       }).join('');
       html += `<div class="stop" style="animation-delay:${i*70}ms"><span class="dot"></span>
-        <div class="round">${step.round_label}${cd}</div>
+        <div class="round"><span class="ri">${ROUND_ICON[step.round]||""}</span>${step.round_label}${cd}</div>
         <div class="meta">Exact city set by the bracket draw — tap a possible venue to explore it:</div>
         <div class="candi-grid">${cards}</div></div>`;
     }
