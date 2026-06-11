@@ -13,19 +13,20 @@ Integrity rules:
   * Nothing here predicts results. We only follow the structure of the bracket.
 """
 
-# Real groups from the Dec 5 2025 draw. "TBD" = intercontinental playoff slot.
+# Final 48-team field from the Dec 5 2025 draw + March 2026 playoffs (all
+# placeholder slots now resolved).
 GROUPS = {
-    "A": ["Mexico", "South Korea", "South Africa", "TBD (Euro playoff)"],
-    "B": ["Canada", "TBD (Euro playoff)", "Qatar", "Switzerland"],
+    "A": ["Mexico", "South Korea", "South Africa", "Czechia"],
+    "B": ["Canada", "Bosnia and Herzegovina", "Qatar", "Switzerland"],
     "C": ["Brazil", "Morocco", "Scotland", "Haiti"],
-    "D": ["United States", "Paraguay", "Australia", "TBD (Euro playoff)"],
+    "D": ["United States", "Paraguay", "Australia", "Türkiye"],
     "E": ["Germany", "Ecuador", "Ivory Coast", "Curacao"],
-    "F": ["Netherlands", "Japan", "Tunisia", "TBD (Euro playoff)"],
+    "F": ["Netherlands", "Japan", "Tunisia", "Sweden"],
     "G": ["Belgium", "Iran", "Egypt", "New Zealand"],
     "H": ["Spain", "Uruguay", "Saudi Arabia", "Cabo Verde"],
-    "I": ["France", "Senegal", "Norway", "TBD (playoff)"],
+    "I": ["France", "Senegal", "Norway", "Iraq"],
     "J": ["Argentina", "Austria", "Algeria", "Jordan"],
-    "K": ["Portugal", "Colombia", "Uzbekistan", "TBD (playoff)"],
+    "K": ["Portugal", "Colombia", "Uzbekistan", "DR Congo"],
     "L": ["England", "Croatia", "Panama", "Ghana"],
 }
 
@@ -196,4 +197,60 @@ def _round_block(match, slots, _table):
         "possible_count": len(teams),
         "teams": teams,
         "note": "Any of these nations could reach this stage in your half of the bracket.",
+    }
+
+
+# Which match each city hosts, per round. From the official WC26 schedule.
+# Venue keys match venues.py. R32: each city -> its match number(s).
+VENUE_MATCH = {
+    "r32": {
+        "la": [73, 84], "boston": [74], "guadalajara": [75], "houston": [76],
+        "nyc": [77], "dallas": [78, 88], "mexicocity": [79], "atlanta": [80],
+        "bayarea": [81], "seattle": [82], "toronto": [83], "vancouver": [85],
+        "miami": [86], "kansascity": [87],
+    },
+    "r16": {
+        "philly": [89], "houston": [90], "nyc": [91], "mexicocity": [92],
+        "dallas": [93], "seattle": [94], "atlanta": [95], "vancouver": [96],
+    },
+    "qf": {"boston": [97], "la": [98], "miami": [99], "kansascity": [100]},
+    "sf": {"dallas": [101], "atlanta": [102]},
+    "final": {"nyc": [103]},
+}
+
+
+def teams_at_venue(city_key, round_key):
+    """Which nations could play at this specific venue in this round.
+
+    Honest: derived from the fixed bracket. For R32 we know the exact slot
+    pairing at each venue; for later rounds we resolve the feeder matches back
+    to the set of nations that could reach that venue. Group stage is handled
+    separately (specific group fixtures), so not included here.
+    """
+    matches = VENUE_MATCH.get(round_key, {}).get(city_key)
+    if not matches:
+        return None
+    teams, seen, pairings = [], set(), []
+    for match in matches:
+        if round_key == "r32":
+            slots = R32.get(match, [])
+            pairings.append(" vs ".join(_slot_label(s) for s in slots))
+            for s in slots:
+                for t in _slot_teams(s):
+                    if t not in seen:
+                        seen.add(t); teams.append(t)
+        else:
+            # resolve feeders down to R32 slots
+            r32s = _expand([match])
+            slots = []
+            for m in r32s:
+                slots += R32.get(m, [])
+            for s in slots:
+                for t in _slot_teams(s):
+                    if t not in seen:
+                        seen.add(t); teams.append(t)
+    return {
+        "round": round_key, "matches": matches,
+        "pairings": pairings,          # only meaningful for r32
+        "teams": teams, "count": len(teams),
     }
