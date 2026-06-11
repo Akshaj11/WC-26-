@@ -95,6 +95,27 @@ INDEX_HTML = r"""<!doctype html>
   .go-row button{width:100%}
 
   .route{margin-top:30px}
+
+  /* visual map */
+  :root{--map-sea:#e6f0ea;}
+  .mapbox{margin:6px 0 22px;border-radius:14px;overflow:hidden;background:#fff;
+    box-shadow:0 4px 16px rgba(10,31,20,.10);border:1.5px solid var(--rule)}
+  .map-legend{display:flex;flex-wrap:wrap;gap:14px;padding:11px 14px;font:700 11px/1 inherit;
+    letter-spacing:.04em;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--rule)}
+  .map-legend span{display:flex;align-items:center;gap:6px}
+  .lg{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .lg-start{background:var(--pitch)}
+  .lg-on{background:#9cc7b2}
+  .lg-final{background:var(--gold)}
+  .map-svg{display:block;width:100%;height:auto;background:var(--map-sea)}
+  .mv-region{fill:#b9d2c4;font:800 15px/1 "Helvetica Neue",Arial;letter-spacing:.22em;text-anchor:middle;text-transform:uppercase}
+  .mv circle{fill:#b4c8bd;stroke:#fff;stroke-width:1.5}
+  .mv-on circle{fill:#6fae8c}
+  .mv-start circle{fill:var(--pitch);stroke:#fff;stroke-width:2.5}
+  .mv-final circle{fill:var(--gold);stroke:#fff;stroke-width:2.5}
+  .mvlabel{fill:var(--ink);font:800 13px/1 "Helvetica Neue",Arial;text-anchor:middle;paint-order:stroke;stroke:#fff;stroke-width:3px}
+  .map-note{padding:10px 14px;font-size:11px;color:var(--muted);font-style:italic;border-top:1px solid var(--rule)}
+
   .summary{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px}
   .summary .big{font:900 22px/1 inherit;letter-spacing:-.02em}
   .summary .big::before{content:"🏟 ";font-size:18px}
@@ -274,7 +295,7 @@ INDEX_HTML = r"""<!doctype html>
 
 <script>
 const $ = s => document.querySelector(s);
-let VENUES = [], BYKEY = {};
+let VENUES = [], BYKEY = {}, MAP = null;
 
 const HOME_ZONES = [
   ['London (UK)','Europe/London'], ['Madrid · Paris · Berlin','Europe/Paris'],
@@ -388,6 +409,7 @@ async function estimateCost(){
 async function boot(){
   const meta = await (await fetch('/api/meta')).json();
   VENUES = meta.venues; VENUES.forEach(v => BYKEY[v.key] = v);
+  MAP = meta.map;
 
   const g = $('#group'); meta.groups.forEach(x => g.add(new Option('Group ' + x, x)));
   const f = $('#finish'); meta.finishes.forEach(x => f.add(new Option(x.label, x.key)));
@@ -452,10 +474,73 @@ async function plot(){
   }
 }
 
+function buildMap(d){
+  if(!MAP) return '';
+  const W = MAP.w, H = MAP.h, P = MAP.points;
+
+  // Which cities are part of this team's journey?
+  const groupCity = d.steps.find(s => s.round === 'group');
+  const startKey = groupCity ? groupCity.cities[0].key : null;
+  const finalStep = d.steps.find(s => s.round === 'final');
+  const finalKey = finalStep ? finalStep.cities[0].key : null;
+  // All candidate + confirmed city keys touched by the route
+  const touched = new Set();
+  d.steps.forEach(s => s.cities.forEach(c => touched.add(c.key)));
+
+  // Confirmed route line: start city -> Final (the two certain anchors).
+  let routeLine = '';
+  if(startKey && finalKey && P[startKey] && P[finalKey]){
+    const a = P[startKey], b = P[finalKey];
+    routeLine = `<path d="M ${a.x} ${a.y} Q ${(a.x+b.x)/2} ${Math.min(a.y,b.y)-60} ${b.x} ${b.y}"
+      fill="none" stroke="var(--gold)" stroke-width="3" stroke-dasharray="2 7"
+      stroke-linecap="round" opacity="0.9"/>`;
+  }
+
+  // Venue dots
+  let dots = '';
+  Object.entries(P).forEach(([k, p]) => {
+    const isStart = k === startKey;
+    const isFinal = k === finalKey;
+    const isTouched = touched.has(k);
+    let cls = 'mv';
+    if(isFinal) cls += ' mv-final';
+    else if(isStart) cls += ' mv-start';
+    else if(isTouched) cls += ' mv-on';
+    const r = (isStart||isFinal) ? 8 : (isTouched ? 6 : 4);
+    dots += `<g class="${cls}">
+      <circle cx="${p.x}" cy="${p.y}" r="${r}"></circle>
+      ${(isStart||isFinal) ? `<text x="${p.x}" y="${p.y-13}" class="mvlabel">${p.city}</text>` : ''}
+    </g>`;
+  });
+
+  // Simple country bands as soft backdrops (visual context, not exact borders).
+  const backdrop = `
+    <rect x="0" y="0" width="${W}" height="${H}" fill="var(--map-sea)"/>
+    <text x="${W*0.5}" y="40" class="mv-region">CANADA</text>
+    <text x="${W*0.46}" y="${H*0.52}" class="mv-region">UNITED STATES</text>
+    <text x="${W*0.40}" y="${H-26}" class="mv-region">MEXICO</text>`;
+
+  return `<div class="mapbox">
+    <div class="map-legend">
+      <span><i class="lg lg-start"></i> Group stage</span>
+      <span><i class="lg lg-on"></i> Possible venue</span>
+      <span><i class="lg lg-final"></i> Final</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" class="map-svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of your team's possible venues across North America">
+      ${backdrop}
+      ${routeLine}
+      ${dots}
+    </svg>
+    <div class="map-note">Dashed gold line marks the confirmed start-to-Final direction. Knockout venues are shown as possible until the bracket draw.</div>
+  </div>`;
+}
+
 function render(d){
   const root = $('#route');
   let html = `<div class="summary"><span class="big">The road ahead</span>
     <span class="km" style="font:700 13px ui-monospace,Menlo;color:var(--pitch)">tap any city for options</span></div>`;
+
+  html += buildMap(d);
 
   d.steps.forEach((step, i) => {
     if(step.certain){
@@ -606,7 +691,8 @@ def kickoff_in_zone(stadium_tz, home_tz, local_hhmm="20:00"):
 
 def h_meta(q, b):
     return {"venues":[venues.venue_public(k) for k in venues.VENUES],
-            "groups":bracket.GROUPS,"finishes":bracket.finishes()}
+            "groups":bracket.GROUPS,"finishes":bracket.finishes(),
+            "map":venues.map_points()}
 
 def h_path(q, b):
     group=b.get("group","A"); finish=b.get("finish","win")
