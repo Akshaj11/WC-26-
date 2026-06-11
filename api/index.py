@@ -607,15 +607,33 @@ async function loadScores(){
     let ms = (d.matches || []).map(m => ({...m, _st: matchState(m)}));
     if(!ms.length){ body.innerHTML = `<div class="empty">No matches to show right now.</div>`; return; }
 
-    // Sort: live first, then upcoming-soon, then recently finished.
-    const rank = {live:0, upcoming:1, done:2};
-    ms.sort((a,b) => {
-      if(rank[a._st.state] !== rank[b._st.state]) return rank[a._st.state]-rank[b._st.state];
-      const ta = a.utc ? Date.parse(a.utc) : 0, tb = b.utc ? Date.parse(b.utc) : 0;
-      // upcoming: soonest first; others: most recent first
-      return a._st.state==='upcoming' ? ta-tb : tb-ta;
-    });
-    ms = ms.slice(0, 8);
+    const now = Date.now();
+    const HOURS = 3600000;
+    const kickoff = m => (m.utc ? Date.parse(m.utc) : 0);
+
+    // Buckets, so the panel always shows what's most relevant *right now*:
+    //  1. LIVE — always shown.
+    //  2. UPCOMING — soonest first (next kickoffs).
+    //  3. RECENT finished — only matches that ended within the last ~6h, newest
+    //     first. Older finished games are dropped so the board stays fresh.
+    const live = ms.filter(m => m._st.state==='live')
+                   .sort((a,b)=>kickoff(a)-kickoff(b));
+    const upcoming = ms.filter(m => m._st.state==='upcoming')
+                       .sort((a,b)=>kickoff(a)-kickoff(b));
+    const recentDone = ms.filter(m => m._st.state==='done' &&
+                                  (now - kickoff(m)) < 6*HOURS)
+                         .sort((a,b)=>kickoff(b)-kickoff(a));
+
+    // Fill up to 8: live first, then a few recent results for context, then
+    // upcoming to fill the rest. This keeps live + next-up always visible.
+    let ordered = [...live, ...recentDone, ...upcoming];
+
+    // If nothing live/recent/soon matched (e.g. long gap between match days),
+    // fall back to the next upcoming fixtures so the panel is never empty.
+    if(!ordered.length){
+      ordered = ms.filter(m=>m._st.state==='upcoming').sort((a,b)=>kickoff(a)-kickoff(b));
+    }
+    ms = ordered.slice(0, 8);
 
     body.innerHTML = ms.map(m => {
       const sc = (m.home_score==null||m.away_score==null) ? '–' : `${m.home_score}–${m.away_score}`;
