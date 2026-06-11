@@ -9,7 +9,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _lib import venues, bracket, flights, hotels, scores, tickets, costs  # noqa
+from _lib import venues, bracket, flights, hotels, scores, tickets, costs, matchups  # noqa
 
 INDEX_HTML = r"""<!doctype html>
 <html lang="en">
@@ -195,6 +195,24 @@ INDEX_HTML = r"""<!doctype html>
 
   /* trip cost estimator */
   .cost-wrap{margin-top:28px;border:1.5px solid var(--ink);border-radius:12px;background:var(--paper2);padding:18px}
+
+  /* possible opponents */
+  .foes-wrap{margin-top:24px;border:1.5px solid var(--pitch);border-radius:14px;background:var(--paper2);padding:18px;border-top:4px solid var(--pitch)}
+  .foes-head{margin-bottom:14px}
+  .foes-title{display:block;font:800 18px/1.1 inherit;letter-spacing:-.01em}
+  .foes-sub{display:block;font-size:13px;color:var(--muted);margin-top:3px}
+  .foe-stage{padding:13px 0;border-bottom:1px solid var(--rule)}
+  .foe-stage:last-of-type{border-bottom:none}
+  .foe-stage-head{display:flex;align-items:center;gap:10px;margin-bottom:3px}
+  .foe-rd{font:800 13px/1 inherit;letter-spacing:.04em;text-transform:uppercase;color:var(--pitch-dark)}
+  .foe-known{font:800 9px/1 inherit;letter-spacing:.08em;text-transform:uppercase;background:var(--pitch);color:#fff;border-radius:20px;padding:3px 8px}
+  .foe-maybe{font:800 9px/1 inherit;letter-spacing:.08em;text-transform:uppercase;background:var(--pitch-soft);color:var(--pitch-dark);border-radius:20px;padding:3px 8px}
+  .foe-note{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .foe-note b{color:var(--ink)}
+  .foe-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .foe-chip{font:700 12px/1 inherit;background:#fff;border:1.5px solid var(--rule);border-radius:20px;padding:6px 11px;display:inline-flex;align-items:center;gap:5px}
+  .foe-chip.foe-tbd{font-style:italic;color:var(--muted);border-style:dashed}
+  .foe-foot{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5;font-style:italic}
   .cost-head{margin-bottom:14px}
   .cost-title{display:block;font:800 18px/1.1 inherit;letter-spacing:-.01em}
   .cost-sub{display:block;font-size:13px;color:var(--muted);margin-top:3px}
@@ -301,6 +319,14 @@ INDEX_HTML = r"""<!doctype html>
     <div id="cost-result"></div>
   </section>
 
+  <section class="foes-wrap" id="foes-wrap" style="display:none">
+    <div class="foes-head">
+      <span class="foes-title">🤜 Who could you face?</span>
+      <span class="foes-sub">Possible opponents at each stage, from the official draw &amp; bracket</span>
+    </div>
+    <div id="foes-result"></div>
+  </section>
+
   <footer id="foot">
     Knockout-round cities are confirmed once the bracket draw is complete; until
     then, each round shows every possible venue your team could reach. Confirmed
@@ -375,6 +401,59 @@ function applyShared(){
   set('#tz','tz'); set('#depart','d'); set('#adults','a');
   return true;
 }
+
+async function loadFoes(payload){
+  const wrap = $('#foes-wrap'), out = $('#foes-result');
+  wrap.style.display = 'block';
+  out.innerHTML = '<div class="empty">Reading the bracket…</div>';
+  try {
+    const d = await (await fetch('/api/matchups', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({group: payload.group, finish: payload.finish})})).json();
+    if(d.error){ out.innerHTML = `<div class="notcfg">${d.error}</div>`; return; }
+    const s = d.stages;
+    const order = [['group','Group stage'],['r32','Round of 32'],['r16','Round of 16'],
+                   ['qf','Quarter-final'],['sf','Semi-final'],['final','Final']];
+    const icon = {group:'🟢',r32:'⚔️',r16:'🔥',qf:'💥',sf:'🏟️',final:'🏆'};
+    let html = '';
+    for(const [key,label] of order){
+      const st = s[key];
+      if(!st) continue;
+      const chips = st.teams.map(t => {
+        const tbd = t.startsWith('TBD');
+        return `<span class="foe-chip${tbd?' foe-tbd':''}">${flagFor(t)} ${t}</span>`;
+      }).join('');
+      const tag = st.known
+        ? `<span class="foe-known">confirmed</span>`
+        : `<span class="foe-maybe">${st.teams.length} possible</span>`;
+      const sub = st.known ? st.note
+        : (st.slot_label ? `vs <b>${st.slot_label}</b> — could be:` : st.note);
+      html += `<div class="foe-stage">
+        <div class="foe-stage-head"><span class="foe-rd">${icon[key]} ${label}</span> ${tag}</div>
+        <div class="foe-note">${sub}</div>
+        <div class="foe-chips">${chips}</div>
+      </div>`;
+    }
+    out.innerHTML = html +
+      `<div class="foe-foot">Group opponents are set by the Dec 5 draw. Knockout names are every nation that could fill that bracket slot — who actually arrives depends on results, so these are possibilities, not predictions.</div>`;
+  } catch(e){
+    out.innerHTML = `<div class="notcfg">Couldn't load matchups — please try again.</div>`;
+  }
+}
+
+// Minimal flag emoji lookup for the nations in the draw.
+const FLAGS = {
+  'Mexico':'🇲🇽','South Korea':'🇰🇷','South Africa':'🇿🇦','Canada':'🇨🇦','Qatar':'🇶🇦',
+  'Switzerland':'🇨🇭','Brazil':'🇧🇷','Morocco':'🇲🇦','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Haiti':'🇭🇹',
+  'United States':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Germany':'🇩🇪','Ecuador':'🇪🇨',
+  'Ivory Coast':'🇨🇮','Curacao':'🇨🇼','Netherlands':'🇳🇱','Japan':'🇯🇵','Tunisia':'🇹🇳',
+  'Belgium':'🇧🇪','Iran':'🇮🇷','Egypt':'🇪🇬','New Zealand':'🇳🇿','Spain':'🇪🇸',
+  'Uruguay':'🇺🇾','Saudi Arabia':'🇸🇦','Cabo Verde':'🇨🇻','France':'🇫🇷','Senegal':'🇸🇳',
+  'Norway':'🇳🇴','Argentina':'🇦🇷','Austria':'🇦🇹','Algeria':'🇩🇿','Jordan':'🇯🇴',
+  'Portugal':'🇵🇹','Colombia':'🇨🇴','Uzbekistan':'🇺🇿','England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷',
+  'Panama':'🇵🇦','Ghana':'🇬🇭',
+};
+function flagFor(team){ return FLAGS[team] || '🏳️'; }
 
 async function estimateCost(){
   const out = $('#cost-result');
@@ -503,6 +582,7 @@ async function plot(){
     render(d);
     $('#cost-wrap').style.display = 'block';
     $('#cost-result').innerHTML = '';
+    loadFoes(payload);
     root.scrollIntoView({behavior:'smooth', block:'start'});
   } catch(e) {
     root.innerHTML = `<div class="empty" style="text-align:center;padding:30px">
@@ -864,9 +944,17 @@ def h_cost(q, b):
     return costs.estimate(steps, nights, nightly_budget=budget,
                           include_flights=include_flights, live_fares=live_fares)
 
+def h_matchups(q, b):
+    group=b.get("group", q.get("group","A"))
+    finish=b.get("finish", q.get("finish","win"))
+    if group not in matchups.GROUPS:
+        return {"error":"Unknown group"}
+    return {"group_id":group, "finish":finish,
+            "stages":matchups.opponents_for(group, finish)}
+
 ROUTES={"/api/meta":h_meta,"/api/path":h_path,"/api/flights":h_flights,
         "/api/hotels":h_hotels,"/api/scores":h_scores,"/api/tickets":h_tickets,
-        "/api/cost":h_cost}
+        "/api/cost":h_cost,"/api/matchups":h_matchups}
 
 def _body(environ):
     try: n=int(environ.get("CONTENT_LENGTH",0) or 0)
