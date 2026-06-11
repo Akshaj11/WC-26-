@@ -213,6 +213,11 @@ INDEX_HTML = r"""<!doctype html>
   .foe-chip{font:700 12px/1 inherit;background:#fff;border:1.5px solid var(--rule);border-radius:20px;padding:6px 11px;display:inline-flex;align-items:center;gap:5px}
   .foe-chip.foe-tbd{font-style:italic;color:var(--muted);border-style:dashed}
   .foe-foot{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5;font-style:italic}
+  .vt-btn{background:var(--gold)!important;color:var(--ink)!important;border-color:var(--gold)!important}
+  .vt-btn:hover{background:#e0b020!important;color:var(--ink)!important}
+  .vt-pairings{display:flex;flex-direction:column;gap:5px;margin:6px 0 9px}
+  .vt-pair{font:700 12px/1.3 inherit;background:var(--pitch-soft);color:var(--pitch-dark);border-radius:7px;padding:7px 10px}
+  .vt-note{font-size:11px;color:var(--muted);font-style:italic;margin-bottom:9px}
   .cost-head{margin-bottom:14px}
   .cost-title{display:block;font:800 18px/1.1 inherit;letter-spacing:-.01em}
   .cost-sub{display:block;font-size:13px;color:var(--muted);margin-top:3px}
@@ -452,6 +457,8 @@ const FLAGS = {
   'Norway':'🇳🇴','Argentina':'🇦🇷','Austria':'🇦🇹','Algeria':'🇩🇿','Jordan':'🇯🇴',
   'Portugal':'🇵🇹','Colombia':'🇨🇴','Uzbekistan':'🇺🇿','England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷',
   'Panama':'🇵🇦','Ghana':'🇬🇭',
+  'Czechia':'🇨🇿','Bosnia and Herzegovina':'🇧🇦','Türkiye':'🇹🇷','Sweden':'🇸🇪',
+  'Iraq':'🇮🇶','DR Congo':'🇨🇩',
 };
 function flagFor(team){ return FLAGS[team] || '🏳️'; }
 
@@ -710,7 +717,7 @@ function render(d){
         <div class="city-line"><span class="city">${v.city}</span>
           <span class="stadium">${v.stadium}</span><span class="flagtag">${v.country}</span></div>
         <div class="meta">${legTxt}${v.sample_kickoff_home?` · sample kickoff in your zone <b>${v.sample_kickoff_home}</b>`:''}</div>
-        ${cityActions(v, leg, step.round_label, i+'-'+v.key)}
+        ${cityActions(v, leg, step.round_label, i+'-'+v.key, step.round)}
         <div class="panel-host" id="ph-${i}-${v.key}"></div>
       </div>`;
     } else {
@@ -726,7 +733,7 @@ function render(d){
           </button>
           <div class="candi-body" id="body-${pid}" style="display:none">
             <div class="meta" style="margin:2px 0 8px">${c.stadium}</div>
-            ${cityActions(c, c.leg, step.round_label, pid)}
+            ${cityActions(c, c.leg, step.round_label, pid, step.round)}
             <div class="panel-host" id="ph-${pid}"></div>
           </div>
         </div>`;
@@ -749,15 +756,37 @@ function toggleCity(pid){
   caret.textContent = open ? '▸' : '▾';
 }
 
-function cityActions(v, leg, roundLabel, pid){
+function cityActions(v, leg, roundLabel, pid, roundKey){
   const canFly = leg && !leg.same_city && leg.origin_iata && leg.dest_iata;
   const si = v.stadium_info || {};
+  const hasVenueTeams = roundKey && roundKey !== 'group';
   return `<div class="actions">
     ${canFly?`<button onclick="lookupFlights('${leg.origin_iata}','${leg.dest_iata}','${pid}')">Flight prices</button>`:''}
     <button onclick="lookupHotels('${v.key}','${pid}')">Find hotels</button>
     <button onclick="lookupTickets('${v.key}','${roundLabel}','${pid}')">Tickets</button>
     ${si.capacity?`<button onclick="showStadium('${v.key}','${pid}')">Stadium info</button>`:''}
+    ${hasVenueTeams?`<button class="vt-btn" onclick="showVenueTeams('${v.key}','${roundKey}','${pid}')">Who could play here?</button>`:''}
   </div>`;
+}
+
+async function showVenueTeams(cityKey, roundKey, pid){
+  setPanel(pid, `<h4>Who could play here</h4><div class="empty">Reading the bracket…</div>`);
+  try {
+    const d = await (await fetch(`/api/venue_teams?city=${cityKey}&round=${roundKey}`)).json();
+    if(!d.available){ return setPanel(pid, `<div class="notcfg">Matchup data isn't available for this venue yet.</div>`); }
+    let pairHtml = '';
+    if(d.pairings && d.pairings.length && d.pairings[0]){
+      pairHtml = `<div class="vt-pairings">` +
+        d.pairings.map(p => `<div class="vt-pair">${p}</div>`).join('') + `</div>`;
+    }
+    const chips = d.teams.map(t => `<span class="foe-chip">${flagFor(t)} ${t}</span>`).join('');
+    setPanel(pid, `<h4>Who could play here · ${d.count} nations</h4>
+      ${pairHtml}
+      <div class="vt-note">Based on the fixed bracket — these nations could fill the slots played at this venue.</div>
+      <div class="foe-chips">${chips}</div>`);
+  } catch(e){
+    setPanel(pid, `<div class="notcfg">Couldn't load matchups — please try again.</div>`);
+  }
 }
 
 function panel(pid){ return document.getElementById('ph-'+pid); }
@@ -952,9 +981,18 @@ def h_matchups(q, b):
     return {"group_id":group, "finish":finish,
             "stages":matchups.opponents_for(group, finish)}
 
+def h_venue_teams(q, b):
+    city=q.get("city",""); rnd=q.get("round","")
+    if not city or not rnd:
+        return {"error":"city and round required"}
+    res = matchups.teams_at_venue(city, rnd)
+    if not res:
+        return {"available": False}
+    return {"available": True, **res}
+
 ROUTES={"/api/meta":h_meta,"/api/path":h_path,"/api/flights":h_flights,
         "/api/hotels":h_hotels,"/api/scores":h_scores,"/api/tickets":h_tickets,
-        "/api/cost":h_cost,"/api/matchups":h_matchups}
+        "/api/cost":h_cost,"/api/matchups":h_matchups,"/api/venue_teams":h_venue_teams}
 
 def _body(environ):
     try: n=int(environ.get("CONTENT_LENGTH",0) or 0)
