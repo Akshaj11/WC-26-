@@ -9,7 +9,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _lib import venues, bracket, flights, hotels, scores, tickets  # noqa
+from _lib import venues, bracket, flights, hotels, scores, tickets, costs  # noqa
 
 INDEX_HTML = r"""<!doctype html>
 <html lang="en">
@@ -126,6 +126,32 @@ INDEX_HTML = r"""<!doctype html>
   .ghost{flex:1;background:#fff;color:var(--ink);border:1.5px solid var(--ink)!important}
   .ghost:hover{background:var(--ink);color:var(--paper2)}
 
+  /* trip cost estimator */
+  .cost-wrap{margin-top:28px;border:1.5px solid var(--ink);border-radius:12px;background:var(--paper2);padding:18px}
+  .cost-head{margin-bottom:14px}
+  .cost-title{display:block;font:800 18px/1.1 inherit;letter-spacing:-.01em}
+  .cost-sub{display:block;font-size:13px;color:var(--muted);margin-top:3px}
+  .cost-inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end}
+  .cost-inputs label{display:block;font:700 11px/1 inherit;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .cost-inputs select,.cost-inputs input[type=number]{width:100%;padding:10px 11px;border:1.5px solid var(--rule);border-radius:7px;background:#fff;font-size:15px;color:var(--ink)}
+  .cost-toggle{font-size:13px;color:var(--ink);display:flex;align-items:center}
+  .cost-toggle label{text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink);display:flex;gap:7px;align-items:center;margin:0}
+  #calc{grid-column:1/-1;padding:12px;border:none;border-radius:8px;background:var(--pitch);color:#fff;font:800 14px/1 inherit;letter-spacing:.04em;cursor:pointer}
+  #calc:hover{background:#176039}
+  #cost-result{margin-top:16px}
+  .cost-total{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
+    background:var(--ink);color:var(--paper2);border-radius:10px;padding:15px 17px;margin-bottom:13px}
+  .cost-total-lbl{font:700 12px/1.3 inherit;letter-spacing:.04em;max-width:55%}
+  .cost-total-amt{font:800 24px/1 ui-monospace,Menlo,monospace;color:#fff}
+  .cost-cat{border:1px solid var(--rule);border-radius:9px;background:#fff;padding:12px 14px;margin-bottom:10px}
+  .cost-cat-head{display:flex;justify-content:space-between;font:800 15px/1 inherit;margin-bottom:6px}
+  .cost-line{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding:3px 0}
+  .cost-amt{font:700 14px ui-monospace,Menlo,monospace;color:var(--pitch)}
+  .cost-line .cost-amt{font-size:12px}
+  .cost-basis{font-size:11px;color:var(--muted);font-style:italic;margin-top:6px;border-top:1px solid #f0e8d6;padding-top:6px}
+  .cost-foot{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+  @media (max-width:520px){.cost-inputs{grid-template-columns:1fr}.cost-total-lbl{max-width:100%}}
+
   footer{margin-top:36px;border-top:1px solid var(--rule);padding-top:14px;font-size:12px;color:var(--muted)}
   .foot-sources{display:block;margin-top:9px;font-size:11px;opacity:.8}
   @media (max-width:520px){.stub{grid-template-columns:1fr}h1{font-size:26px}}
@@ -176,6 +202,28 @@ INDEX_HTML = r"""<!doctype html>
 
   <section class="route" id="route">
     <div class="empty" style="text-align:center;padding:36px">Pick your team above to see the route.</div>
+  </section>
+
+  <section class="cost-wrap" id="cost-wrap" style="display:none">
+    <div class="cost-head">
+      <span class="cost-title">What will following your team cost?</span>
+      <span class="cost-sub">Estimate the whole journey if they go all the way</span>
+    </div>
+    <div class="cost-inputs">
+      <div>
+        <label for="nights">Nights per city</label>
+        <select id="nights"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select>
+      </div>
+      <div>
+        <label for="budget">Your nightly hotel budget (USD)</label>
+        <input type="number" id="budget" value="150" min="0" step="10">
+      </div>
+      <div class="cost-toggle">
+        <label><input type="checkbox" id="incflights" checked> Include flight estimates</label>
+      </div>
+      <button id="calc">Estimate trip cost</button>
+    </div>
+    <div id="cost-result"></div>
   </section>
 
   <footer id="foot">
@@ -250,6 +298,53 @@ function applyShared(){
   return true;
 }
 
+async function estimateCost(){
+  const out = $('#cost-result');
+  const calcBtn = $('#calc'); const orig = calcBtn.textContent;
+  calcBtn.disabled = true; calcBtn.textContent = 'Estimating…';
+  const payload = {
+    group: $('#group').value, finish: $('#finish').value, group_city: $('#city').value,
+    nights_per_stop: parseInt($('#nights').value, 10),
+    nightly_budget: parseFloat($('#budget').value || '0'),
+    include_flights: $('#incflights').checked,
+  };
+  try {
+    const d = await (await fetch('/api/cost', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
+    if(d.error){ out.innerHTML = `<div class="notcfg">${d.error}</div>`; return; }
+    const usd = n => '$' + Math.round(n).toLocaleString();
+    const t = d.tickets, h = d.hotels, fl = d.flights, g = d.grand;
+    const ticketRows = t.lines.map(l =>
+      `<div class="cost-line"><span>${l.round}${l.matches>1?` ×${l.matches}`:''}</span>
+       <span class="cost-amt">${usd(l.low)}–${usd(l.high)}</span></div>`).join('');
+    const flightBlock = fl.included ? `
+      <div class="cost-cat">
+        <div class="cost-cat-head"><span>✈ Flights</span><span class="cost-amt">${usd(fl.low)}–${usd(fl.high)}</span></div>
+        <div class="cost-basis">${fl.basis}</div>
+      </div>` : '';
+    out.innerHTML = `
+      <div class="cost-total">
+        <span class="cost-total-lbl">Estimated total if they reach the Final</span>
+        <span class="cost-total-amt">${usd(g.low)} – ${usd(g.high)}</span>
+      </div>
+      <div class="cost-cat">
+        <div class="cost-cat-head"><span>🎟 Tickets</span><span class="cost-amt">${usd(t.low)}–${usd(t.high)}</span></div>
+        ${ticketRows}
+        <div class="cost-basis">${t.basis}</div>
+      </div>
+      <div class="cost-cat">
+        <div class="cost-cat-head"><span>🏨 Hotels</span><span class="cost-amt">${usd(h.total)}</span></div>
+        <div class="cost-basis">${h.stops} stops × ${h.nights_per_stop} nights × ${usd(h.nightly_budget)}/night</div>
+      </div>
+      ${flightBlock}
+      <div class="cost-foot">Estimates only. Tickets use FIFA's published base bands (dynamic pricing); hotels use your budget; flights are distance-based planning figures, not live quotes.</div>`;
+  } catch(e){
+    out.innerHTML = `<div class="notcfg">Couldn't estimate just now — please try again.</div>`;
+  } finally {
+    calcBtn.disabled = false; calcBtn.textContent = orig;
+  }
+}
+
 async function boot(){
   const meta = await (await fetch('/api/meta')).json();
   VENUES = meta.venues; VENUES.forEach(v => BYKEY[v.key] = v);
@@ -266,6 +361,8 @@ async function boot(){
   $('#go').addEventListener('click', plot);
   const shareBtn = $('#share');
   if(shareBtn) shareBtn.addEventListener('click', shareRoute);
+  const calcBtn = $('#calc');
+  if(calcBtn) calcBtn.addEventListener('click', estimateCost);
   loadScores();
   setInterval(loadScores, 60000); // refresh scores each minute
 
@@ -304,6 +401,8 @@ async function plot(){
     const d = await (await fetch('/api/path', {method:'POST',
       headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})).json();
     render(d);
+    $('#cost-wrap').style.display = 'block';
+    $('#cost-result').innerHTML = '';
     root.scrollIntoView({behavior:'smooth', block:'start'});
   } catch(e) {
     root.innerHTML = `<div class="empty" style="text-align:center;padding:30px">
@@ -502,8 +601,29 @@ def h_tickets(q, b):
     cl=venues.VENUES[c].city if c in venues.VENUES else c
     return tickets.tickets_for(cl, rl)
 
+def h_cost(q, b):
+    group=b.get("group","A"); finish=b.get("finish","win")
+    gc=b.get("group_city","nyc")
+    if gc not in venues.VENUES: return {"error":"Unknown city"}
+    try:
+        nights=int(b.get("nights_per_stop",2))
+        budget=float(b.get("nightly_budget",150))
+    except (TypeError, ValueError):
+        return {"error":"nights_per_stop and nightly_budget must be numbers"}
+    include_flights = bool(b.get("include_flights", True))
+    # Build the path with legs (same logic as h_path, legs only need distance)
+    prev=gc; steps=[]
+    for st in bracket.path_for_team(group,finish,gc):
+        cs=[]
+        for ck in st["cities"]:
+            v=venues.venue_public(ck); v["leg"]=venues.distance_between(prev,ck); cs.append(v)
+        if st["certain"]: prev=st["cities"][0]
+        steps.append({**st,"cities":cs})
+    return costs.estimate(steps, nights, budget, include_flights=include_flights)
+
 ROUTES={"/api/meta":h_meta,"/api/path":h_path,"/api/flights":h_flights,
-        "/api/hotels":h_hotels,"/api/scores":h_scores,"/api/tickets":h_tickets}
+        "/api/hotels":h_hotels,"/api/scores":h_scores,"/api/tickets":h_tickets,
+        "/api/cost":h_cost}
 
 def _body(environ):
     try: n=int(environ.get("CONTENT_LENGTH",0) or 0)
