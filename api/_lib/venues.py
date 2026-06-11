@@ -71,6 +71,29 @@ def stadium_info(key: str) -> dict:
     return STADIUM_INFO.get(key, {})
 
 
+# --- Map projection: lat/lon -> SVG x/y over a North America viewBox ---------
+# Equirectangular projection tuned to the host-nation bounding box. Returns
+# coordinates in an 880 x 620 viewBox used by the inline SVG map.
+_MAP_W, _MAP_H = 880, 620
+_LON_MIN, _LON_MAX = -125.5, -69.0
+_LAT_MIN, _LAT_MAX = 17.5, 50.5
+
+
+def project(lat: float, lon: float):
+    x = (lon - _LON_MIN) / (_LON_MAX - _LON_MIN) * _MAP_W
+    y = (_LAT_MAX - lat) / (_LAT_MAX - _LAT_MIN) * _MAP_H
+    return round(x, 1), round(y, 1)
+
+
+def map_points() -> dict:
+    """All venues projected to map x/y, plus the viewBox dims."""
+    pts = {}
+    for k, v in VENUES.items():
+        x, y = project(v.lat, v.lon)
+        pts[k] = {"x": x, "y": y, "city": v.city, "country": v.country}
+    return {"w": _MAP_W, "h": _MAP_H, "points": pts}
+
+
 def haversine_km(a: Venue, b: Venue) -> float:
     r = 6371.0
     dlat = radians(b.lat - a.lat); dlon = radians(b.lon - a.lon)
