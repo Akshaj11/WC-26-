@@ -219,6 +219,92 @@ VENUE_MATCH = {
 }
 
 
+# Group-stage fixtures actually scheduled at each venue (from the official
+# WC26 schedule, teams resolved). Each entry: (date, "Team A vs Team B", group).
+GROUP_FIXTURES = {
+    "mexicocity": [("Jun 11", "Mexico vs South Africa", "A"),
+                   ("Jun 17", "Uzbekistan vs Colombia", "K"),
+                   ("Jun 24", "Mexico vs Czechia", "A")],
+    "guadalajara": [("Jun 11", "South Korea vs Czechia", "A"),
+                    ("Jun 18", "Mexico vs South Korea", "A"),
+                    ("Jun 23", "Colombia vs DR Congo", "K"),
+                    ("Jun 26", "Uruguay vs Spain", "H")],
+    "toronto": [("Jun 12", "Canada vs Bosnia and Herzegovina", "B"),
+                ("Jun 17", "Ghana vs Panama", "L"),
+                ("Jun 20", "Germany vs Ivory Coast", "E"),
+                ("Jun 23", "Panama vs Croatia", "L"),
+                ("Jun 26", "Senegal vs Iraq", "I")],
+    "la": [("Jun 12", "USA vs Paraguay", "D"),
+           ("Jun 15", "Iran vs New Zealand", "G"),
+           ("Jun 18", "Switzerland vs Bosnia and Herzegovina", "B"),
+           ("Jun 21", "Belgium vs Iran", "G"),
+           ("Jun 25", "USA vs Türkiye", "D")],
+    "nyc": [("Jun 13", "Brazil vs Morocco", "C"),
+            ("Jun 16", "France vs Senegal", "I"),
+            ("Jun 22", "Norway vs Senegal", "I"),
+            ("Jun 25", "Ecuador vs Germany", "E"),
+            ("Jun 27", "Panama vs England", "L")],
+    "vancouver": [("Jun 13", "Australia vs Türkiye", "D"),
+                  ("Jun 18", "Canada vs Qatar", "B"),
+                  ("Jun 21", "New Zealand vs Egypt", "G"),
+                  ("Jun 24", "Canada vs Switzerland", "B"),
+                  ("Jun 26", "New Zealand vs Belgium", "G")],
+    "boston": [("Jun 13", "Haiti vs Scotland", "C"),
+               ("Jun 16", "Iraq vs Norway", "I"),
+               ("Jun 19", "Scotland vs Morocco", "C"),
+               ("Jun 23", "England vs Ghana", "L"),
+               ("Jun 26", "Norway vs France", "I")],
+    "bayarea": [("Jun 13", "Qatar vs Switzerland", "B"),
+                ("Jun 16", "Austria vs Jordan", "J"),
+                ("Jun 19", "Türkiye vs Paraguay", "D"),
+                ("Jun 22", "Jordan vs Algeria", "J"),
+                ("Jun 25", "Paraguay vs Australia", "D")],
+    "houston": [("Jun 14", "Germany vs Curacao", "E"),
+                ("Jun 17", "Portugal vs DR Congo", "K"),
+                ("Jun 20", "Netherlands vs Sweden", "F"),
+                ("Jun 23", "Portugal vs Uzbekistan", "K"),
+                ("Jun 26", "Cabo Verde vs Saudi Arabia", "H")],
+    "philly": [("Jun 14", "Ivory Coast vs Ecuador", "E"),
+               ("Jun 19", "Brazil vs Haiti", "C"),
+               ("Jun 22", "France vs Iraq", "I"),
+               ("Jun 25", "Curacao vs Ivory Coast", "E"),
+               ("Jun 27", "Croatia vs Ghana", "L")],
+    "dallas": [("Jun 14", "Netherlands vs Japan", "F"),
+               ("Jun 17", "England vs Croatia", "L"),
+               ("Jun 22", "Argentina vs Austria", "J"),
+               ("Jun 25", "Japan vs Sweden", "F"),
+               ("Jun 27", "Jordan vs Argentina", "J")],
+    "monterrey": [("Jun 14", "Sweden vs Tunisia", "F"),
+                  ("Jun 20", "Tunisia vs Japan", "F"),
+                  ("Jun 24", "South Korea vs South Africa", "A")],
+    "atlanta": [("Jun 15", "Spain vs Cabo Verde", "H"),
+                ("Jun 18", "Czechia vs South Africa", "A"),
+                ("Jun 21", "Spain vs Saudi Arabia", "H"),
+                ("Jun 24", "Morocco vs Haiti", "C"),
+                ("Jun 27", "DR Congo vs Uzbekistan", "K")],
+    "seattle": [("Jun 15", "Belgium vs Egypt", "G"),
+                ("Jun 19", "USA vs Australia", "D"),
+                ("Jun 24", "Bosnia and Herzegovina vs Qatar", "B"),
+                ("Jun 26", "Egypt vs Iran", "G")],
+    "miami": [("Jun 15", "Saudi Arabia vs Uruguay", "H"),
+              ("Jun 21", "Uruguay vs Cabo Verde", "H"),
+              ("Jun 24", "Scotland vs Brazil", "C"),
+              ("Jun 27", "Colombia vs Portugal", "K")],
+    "kansascity": [("Jun 16", "Argentina vs Algeria", "J"),
+                   ("Jun 20", "Ecuador vs Curacao", "E"),
+                   ("Jun 25", "Tunisia vs Netherlands", "F"),
+                   ("Jun 27", "Algeria vs Austria", "J")],
+}
+
+
+def group_fixtures_at(city_key):
+    """The scheduled group-stage matches at this venue, or None."""
+    fx = GROUP_FIXTURES.get(city_key)
+    if not fx:
+        return None
+    return {"fixtures": [{"date": d, "match": m, "group": g} for d, m, g in fx]}
+
+
 def teams_at_venue(city_key, round_key):
     """Which nations could play at this specific venue in this round.
 
