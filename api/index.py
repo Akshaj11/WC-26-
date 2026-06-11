@@ -97,24 +97,34 @@ INDEX_HTML = r"""<!doctype html>
   .route{margin-top:30px}
 
   /* visual map */
-  :root{--map-sea:#e6f0ea;}
+  :root{--map-sea:#dcebf2;--map-land:#eef4ec;}
   .mapbox{margin:6px 0 22px;border-radius:14px;overflow:hidden;background:#fff;
     box-shadow:0 4px 16px rgba(10,31,20,.10);border:1.5px solid var(--rule)}
   .map-legend{display:flex;flex-wrap:wrap;gap:14px;padding:11px 14px;font:700 11px/1 inherit;
-    letter-spacing:.04em;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--rule)}
+    letter-spacing:.04em;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--rule);align-items:center}
   .map-legend span{display:flex;align-items:center;gap:6px}
+  .map-hint{margin-left:auto;color:var(--pitch-dark)}
   .lg{width:11px;height:11px;border-radius:50%;display:inline-block}
   .lg-start{background:var(--pitch)}
-  .lg-on{background:#9cc7b2}
+  .lg-on{background:#6fae8c}
   .lg-final{background:var(--gold)}
   .map-svg{display:block;width:100%;height:auto;background:var(--map-sea)}
-  .mv-region{fill:#b9d2c4;font:800 15px/1 "Helvetica Neue",Arial;letter-spacing:.22em;text-anchor:middle;text-transform:uppercase}
-  .mv circle{fill:#b4c8bd;stroke:#fff;stroke-width:1.5}
-  .mv-on circle{fill:#6fae8c}
-  .mv-start circle{fill:var(--pitch);stroke:#fff;stroke-width:2.5}
-  .mv-final circle{fill:var(--gold);stroke:#fff;stroke-width:2.5}
-  .mvlabel{fill:var(--ink);font:800 13px/1 "Helvetica Neue",Arial;text-anchor:middle;paint-order:stroke;stroke:#fff;stroke-width:3px}
+  .land{stroke:#fff;stroke-width:1.5;stroke-linejoin:round}
+  .land-us{fill:#eaf3ec}
+  .land-ca{fill:#e3efe6}
+  .land-mx{fill:#f0f1e4}
+  .mv-region{fill:#a9c3b6;font:800 15px/1 "Helvetica Neue",Arial;letter-spacing:.22em;text-anchor:middle;text-transform:uppercase;pointer-events:none}
+  .mv{cursor:pointer}
+  .mv .mvdot{fill:#9fb6aa;stroke:#fff;stroke-width:1.5;transition:transform .12s}
+  .mv:hover .mvdot,.mv:focus .mvdot{transform:scale(1.35);transform-origin:center;transform-box:fill-box}
+  .mv:focus{outline:none}
+  .mv-on .mvdot{fill:#4f9e76}
+  .mv-start .mvdot{fill:var(--pitch);stroke:#fff;stroke-width:2.5}
+  .mv-final .mvdot{fill:var(--gold);stroke:#fff;stroke-width:2.5}
+  .mvlabel{fill:var(--ink);font:800 14px/1 "Helvetica Neue",Arial;paint-order:stroke;stroke:#fff;stroke-width:3.5px;pointer-events:none}
   .map-note{padding:10px 14px;font-size:11px;color:var(--muted);font-style:italic;border-top:1px solid var(--rule)}
+  .stop.flash,.candi.flash{animation:flashbg 1.2s ease}
+  @keyframes flashbg{0%,100%{background:transparent}30%{background:rgba(244,196,48,.22)}}
 
   .summary{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px}
   .summary .big{font:900 22px/1 inherit;letter-spacing:-.02em}
@@ -474,66 +484,104 @@ async function plot(){
   }
 }
 
+// Simplified country outlines, pre-projected to the map viewBox (same
+// projection as the venue dots, so they align). Coarse but recognisable.
+const US_PATH = 'M 12.5,39.5 L 38.9,43.2 L 46.7,65.8 L 20.2,140.9 L 17.1,189.8 L 48.3,238.6 L 76.3,302.5 L 130.8,338.2 L 168.2,334.4 L 225.8,360.7 L 269.5,351.3 L 295.9,351.3 L 350.4,403.9 L 375.4,388.9 L 411.2,452.8 L 442.3,462.2 L 437.7,422.7 L 490.6,390.8 L 537.3,400.2 L 568.5,400.2 L 584.1,377.6 L 630.8,390.8 L 665.1,424.6 L 708.7,475.3 L 707.1,445.3 L 685.3,372.0 L 696.2,347.6 L 730.5,311.9 L 778.8,287.5 L 786.5,234.8 L 802.1,187.9 L 848.8,171.0 L 864.4,159.7 L 866.0,127.8 L 911.2,109.0 L 876.9,58.2 L 841.1,103.3 L 786.5,105.2 L 763.2,129.6 L 724.2,135.3 L 671.3,165.3 L 660.4,159.7 L 669.7,103.3 L 635.5,75.2 L 577.8,41.3 L 540.5,43.2 L 471.9,28.2 L 334.9,28.2 L 179.1,28.2 L 38.9,28.2 L 12.5,39.5 Z';
+const CA_PATH = 'M 34.3,28.2 L 179.1,28.2 L 334.9,28.2 L 471.9,28.2 L 540.5,43.2 L 577.8,41.3 L 635.5,75.2 L 669.7,103.3 L 660.4,159.7 L 724.2,135.3 L 763.2,129.6 L 786.5,105.2 L 841.1,103.3 L 876.9,58.2 L 942.3,65.8 L 1020.2,65.8 L 1082.5,-9.4 L 957.9,-28.2 L 739.8,-28.2 L 724.2,-84.5 L 490.6,-159.7 L 241.4,-178.5 L 38.9,-159.7 L -70.1,-84.5 L -116.8,-65.8 L -38.9,-9.4 L 34.3,28.2 Z';
+const MX_PATH = 'M 130.8,338.2 L 168.2,334.4 L 225.8,360.7 L 269.5,351.3 L 295.9,351.3 L 350.4,403.9 L 375.4,388.9 L 411.2,452.8 L 442.3,462.2 L 433.0,535.5 L 475.0,601.2 L 521.8,601.2 L 579.4,544.8 L 604.3,554.2 L 584.1,601.2 L 552.9,614.4 L 518.7,667.0 L 459.5,653.8 L 381.6,629.4 L 308.4,565.5 L 313.1,516.7 L 250.8,509.2 L 210.3,497.9 L 179.1,441.5 L 179.1,422.7 L 232.1,509.2 L 205.6,403.9 L 166.7,366.4 L 130.8,338.2 Z';
+
 function buildMap(d){
   if(!MAP) return '';
   const W = MAP.w, H = MAP.h, P = MAP.points;
+  const PAD = 60; // padding so edge labels (e.g. NYC) aren't clipped
 
-  // Which cities are part of this team's journey?
   const groupCity = d.steps.find(s => s.round === 'group');
   const startKey = groupCity ? groupCity.cities[0].key : null;
   const finalStep = d.steps.find(s => s.round === 'final');
   const finalKey = finalStep ? finalStep.cities[0].key : null;
-  // All candidate + confirmed city keys touched by the route
   const touched = new Set();
   d.steps.forEach(s => s.cities.forEach(c => touched.add(c.key)));
 
-  // Confirmed route line: start city -> Final (the two certain anchors).
+  // route arc start -> final
   let routeLine = '';
   if(startKey && finalKey && P[startKey] && P[finalKey]){
     const a = P[startKey], b = P[finalKey];
-    routeLine = `<path d="M ${a.x} ${a.y} Q ${(a.x+b.x)/2} ${Math.min(a.y,b.y)-60} ${b.x} ${b.y}"
-      fill="none" stroke="var(--gold)" stroke-width="3" stroke-dasharray="2 7"
-      stroke-linecap="round" opacity="0.9"/>`;
+    routeLine = `<path d="M ${a.x} ${a.y} Q ${(a.x+b.x)/2} ${Math.min(a.y,b.y)-70} ${b.x} ${b.y}"
+      fill="none" stroke="var(--gold)" stroke-width="3.5" stroke-dasharray="1 8"
+      stroke-linecap="round" opacity="0.95"/>`;
   }
 
-  // Venue dots
+  // dots — every one tappable
   let dots = '';
   Object.entries(P).forEach(([k, p]) => {
-    const isStart = k === startKey;
-    const isFinal = k === finalKey;
-    const isTouched = touched.has(k);
+    const isStart = k === startKey, isFinal = k === finalKey, isOn = touched.has(k);
     let cls = 'mv';
-    if(isFinal) cls += ' mv-final';
-    else if(isStart) cls += ' mv-start';
-    else if(isTouched) cls += ' mv-on';
-    const r = (isStart||isFinal) ? 8 : (isTouched ? 6 : 4);
-    dots += `<g class="${cls}">
-      <circle cx="${p.x}" cy="${p.y}" r="${r}"></circle>
-      ${(isStart||isFinal) ? `<text x="${p.x}" y="${p.y-13}" class="mvlabel">${p.city}</text>` : ''}
+    if(isFinal) cls += ' mv-final'; else if(isStart) cls += ' mv-start'; else if(isOn) cls += ' mv-on';
+    const r = (isStart||isFinal) ? 8.5 : (isOn ? 6.5 : 5);
+    // label only the start + final to avoid clutter; place inward if near edge
+    let label = '';
+    if(isStart || isFinal){
+      const nearRight = p.x > W - 140;
+      const lx = nearRight ? p.x - 13 : p.x + 13;
+      const anchor = nearRight ? 'end' : 'start';
+      label = `<text x="${lx}" y="${p.y+4}" class="mvlabel" text-anchor="${anchor}">${p.city}</text>`;
+    }
+    dots += `<g class="${cls}" onclick="mapTap('${k}')" tabindex="0" role="button"
+        aria-label="${p.city}" onkeydown="if(event.key==='Enter')mapTap('${k}')">
+      <circle cx="${p.x}" cy="${p.y}" r="16" fill="transparent"></circle>
+      <circle cx="${p.x}" cy="${p.y}" r="${r}" class="mvdot"></circle>
+      ${label}
     </g>`;
   });
 
-  // Simple country bands as soft backdrops (visual context, not exact borders).
-  const backdrop = `
-    <rect x="0" y="0" width="${W}" height="${H}" fill="var(--map-sea)"/>
-    <text x="${W*0.5}" y="40" class="mv-region">CANADA</text>
-    <text x="${W*0.46}" y="${H*0.52}" class="mv-region">UNITED STATES</text>
-    <text x="${W*0.40}" y="${H-26}" class="mv-region">MEXICO</text>`;
+  const labels = `
+    <text x="${W*0.52}" y="58" class="mv-region">CANADA</text>
+    <text x="${W*0.40}" y="${H*0.46}" class="mv-region">UNITED STATES</text>
+    <text x="${W*0.36}" y="${H-20}" class="mv-region">MEXICO</text>`;
 
   return `<div class="mapbox">
     <div class="map-legend">
       <span><i class="lg lg-start"></i> Group stage</span>
       <span><i class="lg lg-on"></i> Possible venue</span>
       <span><i class="lg lg-final"></i> Final</span>
+      <span class="map-hint">tap a city ↗</span>
     </div>
-    <svg viewBox="0 0 ${W} ${H}" class="map-svg" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of your team's possible venues across North America">
-      ${backdrop}
+    <svg viewBox="${-PAD} ${-PAD} ${W+PAD*2} ${H+PAD*2}" class="map-svg" preserveAspectRatio="xMidYMid meet"
+         role="img" aria-label="Map of your team's possible venues across North America">
+      <rect x="${-PAD}" y="${-PAD}" width="${W+PAD*2}" height="${H+PAD*2}" fill="var(--map-sea)"/>
+      <path d="${CA_PATH}" class="land land-ca"/>
+      <path d="${US_PATH}" class="land land-us"/>
+      <path d="${MX_PATH}" class="land land-mx"/>
+      ${labels}
       ${routeLine}
       ${dots}
     </svg>
-    <div class="map-note">Dashed gold line marks the confirmed start-to-Final direction. Knockout venues are shown as possible until the bracket draw.</div>
+    <div class="map-note">Tap any city to see its travel options below. Dashed gold line marks the confirmed start-to-Final direction.</div>
   </div>`;
 }
+
+// Tapping a map dot scrolls to that city and opens it.
+function mapTap(cityKey){
+  // Prefer the certain stop with this key; else the first candidate card.
+  let target = document.getElementById('ph-'+findStopIndex(cityKey)+'-'+cityKey);
+  // open a candidate card if present
+  const candi = document.querySelector(`[id^="body-"][id$="-${cityKey}"]`);
+  if(candi && candi.style.display === 'none'){
+    const pid = candi.id.replace('body-','');
+    toggleCity(pid);
+    target = document.getElementById('ph-'+pid);
+  }
+  const card = candi ? candi.closest('.candi') : (target ? target.closest('.stop') : null);
+  if(card){ card.scrollIntoView({behavior:'smooth', block:'center'});
+    card.classList.add('flash'); setTimeout(()=>card.classList.remove('flash'), 1200); }
+}
+function findStopIndex(cityKey){
+  // certain stops use index-key ids; scan for a matching panel host
+  const hosts = document.querySelectorAll('[id^="ph-"]');
+  for(const h of hosts){ if(h.id.endsWith('-'+cityKey)) return h.id.split('-')[1]; }
+  return '';
+}
+
 
 function render(d){
   const root = $('#route');
