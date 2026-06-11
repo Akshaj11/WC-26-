@@ -218,6 +218,12 @@ INDEX_HTML = r"""<!doctype html>
   .vt-pairings{display:flex;flex-direction:column;gap:5px;margin:6px 0 9px}
   .vt-pair{font:700 12px/1.3 inherit;background:var(--pitch-soft);color:var(--pitch-dark);border-radius:7px;padding:7px 10px}
   .vt-note{font-size:11px;color:var(--muted);font-style:italic;margin-bottom:9px}
+  .gf-list{display:flex;flex-direction:column;gap:6px;margin:4px 0 9px}
+  .gf-row{display:flex;align-items:center;gap:9px;padding:7px 9px;background:#fff;border:1px solid var(--rule);border-radius:8px}
+  .gf-date{font:700 10px/1 ui-monospace,Menlo,monospace;color:var(--pitch-dark);min-width:42px}
+  .gf-match{flex:1;font-size:13px;font-weight:600}
+  .gf-v{color:var(--muted);font-weight:400;font-size:11px;margin:0 2px}
+  .gf-grp{font:800 9px/1 inherit;letter-spacing:.06em;background:var(--pitch-soft);color:var(--pitch-dark);border-radius:5px;padding:3px 6px}
   .cost-head{margin-bottom:14px}
   .cost-title{display:block;font:800 18px/1.1 inherit;letter-spacing:-.01em}
   .cost-sub{display:block;font-size:13px;color:var(--muted);margin-top:3px}
@@ -759,21 +765,40 @@ function toggleCity(pid){
 function cityActions(v, leg, roundLabel, pid, roundKey){
   const canFly = leg && !leg.same_city && leg.origin_iata && leg.dest_iata;
   const si = v.stadium_info || {};
-  const hasVenueTeams = roundKey && roundKey !== 'group';
+  const hasVenueTeams = !!roundKey;
+  const vtLabel = roundKey === 'group' ? 'Matches here' : 'Who could play here?';
   return `<div class="actions">
     ${canFly?`<button onclick="lookupFlights('${leg.origin_iata}','${leg.dest_iata}','${pid}')">Flight prices</button>`:''}
     <button onclick="lookupHotels('${v.key}','${pid}')">Find hotels</button>
     <button onclick="lookupTickets('${v.key}','${roundLabel}','${pid}')">Tickets</button>
     ${si.capacity?`<button onclick="showStadium('${v.key}','${pid}')">Stadium info</button>`:''}
-    ${hasVenueTeams?`<button class="vt-btn" onclick="showVenueTeams('${v.key}','${roundKey}','${pid}')">Who could play here?</button>`:''}
+    ${hasVenueTeams?`<button class="vt-btn" onclick="showVenueTeams('${v.key}','${roundKey}','${pid}')">${vtLabel}</button>`:''}
   </div>`;
 }
 
 async function showVenueTeams(cityKey, roundKey, pid){
-  setPanel(pid, `<h4>Who could play here</h4><div class="empty">Reading the bracket…</div>`);
+  setPanel(pid, `<h4>Matches here</h4><div class="empty">Reading the schedule…</div>`);
   try {
     const d = await (await fetch(`/api/venue_teams?city=${cityKey}&round=${roundKey}`)).json();
-    if(!d.available){ return setPanel(pid, `<div class="notcfg">Matchup data isn't available for this venue yet.</div>`); }
+    if(!d.available){ return setPanel(pid, `<div class="notcfg">Match data isn't available for this venue yet.</div>`); }
+
+    // Group stage: show the actual scheduled fixtures with flags
+    if(d.round === 'group' && d.fixtures){
+      const rows = d.fixtures.map(f => {
+        const parts = f.match.split(' vs ');
+        const a = parts[0], b = parts[1] || '';
+        return `<div class="gf-row">
+          <span class="gf-date">${f.date}</span>
+          <span class="gf-match">${flagFor(a)} ${a} <span class="gf-v">v</span> ${flagFor(b)} ${b}</span>
+          <span class="gf-grp">${f.group}</span>
+        </div>`;
+      }).join('');
+      return setPanel(pid, `<h4>Scheduled here · ${d.fixtures.length} group matches</h4>
+        <div class="gf-list">${rows}</div>
+        <div class="vt-note">Confirmed group-stage fixtures at this venue.</div>`);
+    }
+
+    // Knockout: bracket-based possible teams
     let pairHtml = '';
     if(d.pairings && d.pairings.length && d.pairings[0]){
       pairHtml = `<div class="vt-pairings">` +
@@ -785,7 +810,7 @@ async function showVenueTeams(cityKey, roundKey, pid){
       <div class="vt-note">Based on the fixed bracket — these nations could fill the slots played at this venue.</div>
       <div class="foe-chips">${chips}</div>`);
   } catch(e){
-    setPanel(pid, `<div class="notcfg">Couldn't load matchups — please try again.</div>`);
+    setPanel(pid, `<div class="notcfg">Couldn't load matches — please try again.</div>`);
   }
 }
 
@@ -985,6 +1010,11 @@ def h_venue_teams(q, b):
     city=q.get("city",""); rnd=q.get("round","")
     if not city or not rnd:
         return {"error":"city and round required"}
+    if rnd == "group":
+        gf = matchups.group_fixtures_at(city)
+        if not gf:
+            return {"available": False}
+        return {"available": True, "round": "group", **gf}
     res = matchups.teams_at_venue(city, rnd)
     if not res:
         return {"available": False}
