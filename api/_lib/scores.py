@@ -38,6 +38,7 @@ def _via_footballdata():
             "home_score": score.get("home"),
             "away_score": score.get("away"),
             "status": m.get("status", ""),
+            "minute": m.get("minute"),       # live minute if in play
             "utc": m.get("utcDate", ""),
             "stage": m.get("stage", ""),
         })
@@ -56,12 +57,14 @@ def _via_apifootball():
     out = []
     for f in res.get("response", []):
         teams = f.get("teams", {}); goals = f.get("goals", {}); fx = f.get("fixture", {})
+        st = fx.get("status", {})
         out.append({
             "home": teams.get("home", {}).get("name", "TBD"),
             "away": teams.get("away", {}).get("name", "TBD"),
             "home_score": goals.get("home"),
             "away_score": goals.get("away"),
-            "status": fx.get("status", {}).get("short", ""),
+            "status": st.get("short", ""),
+            "minute": st.get("elapsed"),     # live minute if in play
             "utc": fx.get("date", ""),
             "stage": (f.get("league", {}) or {}).get("round", ""),
         })
